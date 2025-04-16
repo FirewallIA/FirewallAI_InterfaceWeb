@@ -21,11 +21,19 @@ export class MemStorage implements IStorage {
     this.users = new Map();
     this.currentId = 1;
     
-    // Create a default admin user for testing
+    // Create default admin users for testing
     this.createUser({
       username: "admin",
       email: "admin@firewallai.com",
       password: "$2b$10$rQEk2eDsEJhPK1KZqZ3Im.2f6pUs6Y2.iens0FLZuJjv1Ts/e7yhe", // "password"
+      role: "admin"
+    });
+    
+    // Ajout de l'utilisateur de test demandé avec mot de passe 'root'
+    this.createUser({
+      username: "root",
+      email: "root@root.fr",
+      password: "888eddc9876765f4b0a227678d1857fbf2865bb5c60367b6824210aeb8a209e7e8be1f1452e31c280d6055e7363e1cf7cc11f37330aaa9113ebbc82ca0f995d0.devtestsalt12345", // 'root'
       role: "admin"
     });
   }
