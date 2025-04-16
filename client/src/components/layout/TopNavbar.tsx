@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation } from 'wouter';
 import FirewallLogo from '../FirewallLogo';
 import { useAuth } from '@/hooks/use-auth';
+import { useTheme } from '@/hooks/use-theme';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -11,11 +12,12 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LogOut, Settings, User } from 'lucide-react';
+import { LogOut, Settings, User, Moon, Sun } from 'lucide-react';
 
 const TopNavbar: React.FC = () => {
   const [location, setLocation] = useLocation();
   const { user, logoutMutation } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   
   // Get page title based on current location
   const getPageTitle = () => {
@@ -60,6 +62,19 @@ const TopNavbar: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-4">
+          {/* Bouton de changement de thème */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full hover:bg-[#1a1d25] focus:outline-none"
+            aria-label={theme === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'}
+          >
+            {theme === 'dark' ? (
+              <Sun size={20} className="text-yellow-400" />
+            ) : (
+              <Moon size={20} className="text-blue-400" />
+            )}
+          </button>
+          
           <div className="relative">
             <input 
               type="text" 
