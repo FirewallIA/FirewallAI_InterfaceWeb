@@ -18,6 +18,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (savedTheme) {
       setTheme(savedTheme);
       applyTheme(savedTheme);
+    } else {
+      // Si aucun thème n'est sauvegardé, utiliser le thème sombre par défaut
+      setTheme('dark');
+      applyTheme('dark');
+      localStorage.setItem('theme', 'dark');
     }
   }, []);
 
@@ -34,8 +39,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.add('light');
       root.classList.remove('dark');
-      document.body.style.backgroundColor = '#f8f9fa';
-      document.body.style.color = '#121212';
+      document.body.style.backgroundColor = '#f0f2f5'; // Fond gris très clair
+      document.body.style.color = '#333333'; // Texte gris foncé pour moins de contraste
     }
   };
 
