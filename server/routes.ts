@@ -3,6 +3,10 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer } from 'ws';
 import { setupAuth } from "./auth";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
+
+const scryptAsync = promisify(scrypt);
 
 // Middleware pour vérifier si l'utilisateur est authentifié
 const ensureAuthenticated = (req: Request, res: Response, next: NextFunction) => {
@@ -369,6 +373,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
           res.json({ users: safeUsers });
         } catch (error) {
           res.status(500).json({ message: "Error fetching users" });
+        }
+      }
+    },
+    { 
+      method: 'get', 
+      path: '/api/users/:id', 
+      handler: async (req, res) => {
+        if (req.user?.role !== 'admin' && parseInt(req.params.id) !== req.user?.id) {
+          return res.status(403).json({ message: "Permission denied" });
+        }
+        
+        try {
+          const userId = parseInt(req.params.id);
+          const user = await storage.getUser(userId);
+          
+          if (!user) {
+            return res.status(404).json({ message: "Utilisateur non trouvé" });
+          }
+          
+          // Remove password from response
+          const { password, ...safeUser } = user;
+          res.json(safeUser);
+        } catch (error) {
+          res.status(500).json({ message: "Erreur lors de la récupération de l'utilisateur" });
+        }
+      }
+    },
+    { 
+      method: 'patch', 
+      path: '/api/users/:id', 
+      handler: async (req, res) => {
+        const userId = parseInt(req.params.id);
+        
+        // Vérifier les permissions
+        if (req.user?.role !== 'admin' && userId !== req.user?.id) {
+          return res.status(403).json({ message: "Permission denied" });
+        }
+        
+        try {
+          const user = await storage.getUser(userId);
+          
+          if (!user) {
+            return res.status(404).json({ message: "Utilisateur non trouvé" });
+          }
+          
+          // Un utilisateur standard ne peut pas changer son rôle
+          if (req.user?.role !== 'admin' && req.body.role) {
+            delete req.body.role;
+          }
+          
+          // Si un mot de passe est fourni, le hacher
+          if (req.body.password) {
+            const salt = randomBytes(16).toString("hex");
+            const buf = (await scryptAsync(req.body.password, salt, 64)) as Buffer;
+            req.body.password = `${buf.toString("hex")}.${salt}`;
+          }
+          
+          const updatedUser = await storage.updateUser(userId, req.body);
+          
+          if (!updatedUser) {
+            return res.status(500).json({ message: "Échec de la mise à jour de l'utilisateur" });
+          }
+          
+          // Remove password from response
+          const { password, ...safeUser } = updatedUser;
+          res.json(safeUser);
+        } catch (error) {
+          res.status(500).json({ message: "Erreur lors de la mise à jour de l'utilisateur" });
+        }
+      }
+    },
+    { 
+      method: 'delete', 
+      path: '/api/users/:id', 
+      handler: async (req, res) => {
+        // Seul un admin peut supprimer des utilisateurs
+        if (req.user?.role !== 'admin') {
+          return res.status(403).json({ message: "Permission denied - Admin access required" });
+        }
+        
+        const userId = parseInt(req.params.id);
+        
+        // Empêcher la suppression de son propre compte
+        if (userId === req.user.id) {
+          return res.status(400).json({ message: "Vous ne pouvez pas supprimer votre propre compte" });
+        }
+        
+        try {
+          const deleted = await storage.deleteUser(userId);
+          
+          if (!deleted) {
+            return res.status(404).json({ message: "Utilisateur non trouvé" });
+          }
+          
+          res.status(204).send();
+        } catch (error) {
+          res.status(500).json({ message: "Erreur lors de la suppression de l'utilisateur" });
         }
       }
     },

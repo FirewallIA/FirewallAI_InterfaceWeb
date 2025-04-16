@@ -12,8 +12,10 @@ import LogsAnalysisPage from "@/pages/LogsAnalysisPage";
 import AIAssistantPage from "@/pages/AIAssistantPage";
 import EDRMonitoringPage from "@/pages/EDRMonitoringPage";
 import SettingsPage from "@/pages/SettingsPage";
+import UsersPage from "@/pages/UsersPage";
 import AuthPage from "@/pages/auth-page";
 import { AuthProvider } from "@/hooks/use-auth";
+import { ThemeProvider } from "@/hooks/use-theme";
 import { ProtectedRoute } from "@/components/protected-route";
 
 function Router() {
@@ -69,6 +71,12 @@ function Router() {
         </Layout>
       )} />
       
+      <ProtectedRoute path="/users" component={() => (
+        <Layout>
+          <UsersPage />
+        </Layout>
+      )} />
+      
       <Route component={NotFound} />
     </Switch>
   );
@@ -78,8 +86,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router />
-        <Toaster />
+        <ThemeProvider>
+          <Router />
+          <Toaster />
+        </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
