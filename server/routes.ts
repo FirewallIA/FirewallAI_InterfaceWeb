@@ -1,7 +1,16 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer } from 'ws';
+import { setupAuth } from "./auth";
+
+// Middleware pour vérifier si l'utilisateur est authentifié
+const ensureAuthenticated = (req: Request, res: Response, next: NextFunction) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ message: "Unauthorized - Authentication required" });
+};
 
 // Mock data for the FirewallAI frontend
 const mockData = {
@@ -273,92 +282,111 @@ const mockData = {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  // Setup authentication
+  setupAuth(app);
 
-  // System Status
-  app.get('/api/system/status', (req, res) => {
-    res.json(mockData.systemStatus);
+  // Groupes de routes protégées (nécessitant une authentification)
+  const protectedRoutes = [
+    // System routes (protégées)
+    { method: 'get', path: '/api/system/status', handler: (req, res) => res.json(mockData.systemStatus) },
+    { method: 'get', path: '/api/system/configuration', handler: (req, res) => res.json({ message: "Not implemented yet" }) },
+    
+    // Security routes (protégées)
+    { method: 'get', path: '/api/alerts', handler: (req, res) => res.json(mockData.alerts) },
+    { method: 'get', path: '/api/threats/latest', handler: (req, res) => res.json(mockData.threats) },
+    
+    // Network routes (protégées)
+    { method: 'get', path: '/api/network/traffic', handler: (req, res) => res.json(mockData.networkTraffic) },
+    { method: 'get', path: '/api/network/topology', handler: (req, res) => res.json(mockData.networkTopology) },
+    { method: 'get', path: '/api/network/interfaces', handler: (req, res) => res.json({ message: "Not implemented yet" }) },
+    
+    // Firewall routes (protégées)
+    { method: 'get', path: '/api/firewall/rules', handler: (req, res) => res.json(mockData.firewallRules) },
+    
+    // Logs routes (protégées)
+    { method: 'get', path: '/api/logs/analysis', handler: (req, res) => res.json(mockData.logAnalysis) },
+    { method: 'get', path: '/api/logs/summary', handler: (req, res) => res.json(mockData.logSummary) },
+    { method: 'get', path: '/api/logs/export', handler: (req, res) => res.json({ message: "Export functionality coming soon" }) },
+    
+    // EDR routes (protégées)
+    { method: 'get', path: '/api/edr/status', handler: (req, res) => res.json(mockData.edrStatus) },
+    { method: 'get', path: '/api/edr/activities', handler: (req, res) => res.json(mockData.endpointActivities) },
+    { method: 'get', path: '/api/edr/settings', handler: (req, res) => res.json({ message: "EDR settings not implemented yet" }) },
+    { method: 'get', path: '/api/edr/logs', handler: (req, res) => res.json({ message: "EDR logs not implemented yet" }) },
+    
+    // AI Assistant routes (protégées)
+    { method: 'get', path: '/api/ai/chat/history', handler: (req, res) => res.json(mockData.chatHistory) },
+    { 
+      method: 'post', 
+      path: '/api/ai/chat/message', 
+      handler: (req, res) => {
+        const { content } = req.body;
+        if (!content) {
+          return res.status(400).json({ message: 'Message content is required' });
+        }
+
+        // Add user message to history
+        const userMessage = {
+          id: Date.now().toString(),
+          sender: 'user',
+          content,
+          timestamp: new Date().toISOString()
+        };
+        mockData.chatHistory.messages.push(userMessage);
+
+        // Simulate AI response
+        setTimeout(() => {
+          const aiMessage = {
+            id: (Date.now() + 1).toString(),
+            sender: 'ai',
+            content: `I've analyzed your query: "${content}". This is a simulated response from the AI assistant.`,
+            timestamp: new Date().toISOString()
+          };
+          mockData.chatHistory.messages.push(aiMessage);
+        }, 1000);
+
+        res.status(201).json({ message: 'Message sent successfully' });
+      }
+    },
+    
+    // User management routes (admin only)
+    { 
+      method: 'get', 
+      path: '/api/users', 
+      handler: async (req, res) => {
+        if (req.user?.role !== 'admin') {
+          return res.status(403).json({ message: "Permission denied - Admin access required" });
+        }
+        
+        try {
+          const users = await storage.getAllUsers();
+          // Remove password from response
+          const safeUsers = users.map(user => {
+            const { password, ...safeUser } = user;
+            return safeUser;
+          });
+          
+          res.json({ users: safeUsers });
+        } catch (error) {
+          res.status(500).json({ message: "Error fetching users" });
+        }
+      }
+    },
+  ];
+
+  // Enregistrer routes protégées
+  protectedRoutes.forEach(route => {
+    const { method, path, handler } = route;
+    app[method as keyof Express](path, ensureAuthenticated, handler);
   });
 
-  // Alerts
-  app.get('/api/alerts', (req, res) => {
-    res.json(mockData.alerts);
-  });
-
-  // Network Traffic
-  app.get('/api/network/traffic', (req, res) => {
-    res.json(mockData.networkTraffic);
-  });
-
-  // Threats
-  app.get('/api/threats/latest', (req, res) => {
-    res.json(mockData.threats);
-  });
-
-  // Firewall Rules
-  app.get('/api/firewall/rules', (req, res) => {
-    res.json(mockData.firewallRules);
-  });
-
-  // Network Topology
-  app.get('/api/network/topology', (req, res) => {
-    res.json(mockData.networkTopology);
-  });
-
-  // Chat History
-  app.get('/api/ai/chat/history', (req, res) => {
-    res.json(mockData.chatHistory);
-  });
-
-  // Send new chat message
-  app.post('/api/ai/chat/message', (req, res) => {
-    const { content } = req.body;
-    if (!content) {
-      return res.status(400).json({ message: 'Message content is required' });
-    }
-
-    // Add user message to history
-    const userMessage = {
-      id: Date.now().toString(),
-      sender: 'user',
-      content,
-      timestamp: new Date().toISOString()
-    };
-    mockData.chatHistory.messages.push(userMessage);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        content: `I've analyzed your query: "${content}". This is a simulated response from the AI assistant.`,
-        timestamp: new Date().toISOString()
-      };
-      mockData.chatHistory.messages.push(aiMessage);
-    }, 1000);
-
-    res.status(201).json({ message: 'Message sent successfully' });
-  });
-
-  // EDR Status
-  app.get('/api/edr/status', (req, res) => {
-    res.json(mockData.edrStatus);
-  });
-
-  // Endpoint Activities
-  app.get('/api/edr/activities', (req, res) => {
-    res.json(mockData.endpointActivities);
-  });
-
-  // Log Analysis
-  app.get('/api/logs/analysis', (req, res) => {
-    res.json(mockData.logAnalysis);
-  });
-
-  // Log Summary
-  app.get('/api/logs/summary', (req, res) => {
-    res.json(mockData.logSummary);
+  // Route de diagnostic (non protégée)
+  app.get('/api/status', (req, res) => {
+    res.json({
+      status: 'OK',
+      version: '1.0.0',
+      authenticated: req.isAuthenticated()
+    });
   });
 
   const httpServer = createServer(app);
