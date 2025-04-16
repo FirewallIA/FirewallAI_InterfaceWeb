@@ -19,6 +19,7 @@ type RegisterData = {
   username: string;
   email: string;
   password: string;
+  role?: string;
 };
 
 type AuthContextType = {
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     retry: false,
     refetchOnWindowFocus: false,
+    refetchInterval: 5 * 60 * 1000, // rafraîchir toutes les 5 minutes
   });
 
   const loginMutation = useMutation({
