@@ -23,16 +23,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <button 
           type="button" 
           onClick={toggleSidebar}
-          className="text-gray-300 hover:text-white focus:outline-none"
+          className="text-dark hover:text-white focus:outline-none"
         >
           <i className="ri-menu-line text-2xl"></i>
         </button>
       </div>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto scrollbar-hide bg-[#0b0f19]">
+      <main className="flex-1 overflow-y-auto scrollbar-hide bg-[#1a1d25]">
         <TopNavbar />
-        <div className="p-6">
+        <div className="p-6 bg-[#1a1d25]">
           {children}
         </div>
       </main>

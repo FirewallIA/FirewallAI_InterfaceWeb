@@ -15,7 +15,7 @@ Une interface front-end professionnelle pour FirewallAI, offrant une solution de
 
 ### Prérequis
 - Node.js (version 18 ou supérieure)
-- npm ou yarn
+- npm
 
 ### 1. Cloner le projet
 ```bash

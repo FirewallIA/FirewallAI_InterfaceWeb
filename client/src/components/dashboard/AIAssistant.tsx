@@ -184,7 +184,7 @@ const AIAssistant: React.FC = () => {
                     ? 'bg-[#11131a]'
                     : 'bg-primary-900/50 border border-primary-800/50'
                   } rounded-lg p-3 max-w-[80%]`}>
-                  <p className="text-sm text-gray-300">{message.content}</p>
+                  <p className="text-sm text-gray-500">{message.content}</p>
                 </div>
               </div>
             ))}

@@ -33,7 +33,7 @@ const AIAssistantPage: React.FC = () => {
             <CardTitle className="text-white">AI Capabilities</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-3 text-gray-300">
+            <ul className="space-y-3 text-gray-500">
               <li className="flex items-start">
                 <i className="ri-check-line text-green-500 mr-2 mt-1"></i>
                 <span>Security event analysis and explanation</span>

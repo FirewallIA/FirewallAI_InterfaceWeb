@@ -49,26 +49,15 @@ const SettingsPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="companyName">Company Name</Label>
-                  <Input id="companyName" defaultValue="FirewallAI Inc." className="bg-[#1a1d25] border-[#222631]" />
+                  <Input id="companyName" defaultValue="FirewallAI" className="bg-[#1a1d25] border-[#222631]" />
                 </div>
                 
                 <div className="space-y-2">
                   <Label htmlFor="timezone">Timezone</Label>
                   <select id="timezone" className="w-full h-9 rounded-md bg-[#1a1d25] border-[#222631] px-3 text-sm">
                     <option>UTC (GMT+0)</option>
-                    <option>Eastern Time (GMT-5)</option>
-                    <option>Pacific Time (GMT-8)</option>
-                    <option>Central European Time (GMT+1)</option>
                   </select>
                 </div>
-              </div>
-              
-              <div className="flex items-center justify-between border-t border-[#222631] pt-4">
-                <div className="space-y-0.5">
-                  <Label htmlFor="darkMode">Dark Mode</Label>
-                  <p className="text-xs text-gray-400">Enable dark mode interface</p>
-                </div>
-                <Switch id="darkMode" defaultChecked />
               </div>
               
               <div className="flex items-center justify-between border-t border-[#222631] pt-4">

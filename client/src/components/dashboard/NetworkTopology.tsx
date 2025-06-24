@@ -140,19 +140,19 @@ const NetworkTopology: React.FC = () => {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="flex items-center text-xs">
             <span className="w-3 h-3 rounded-full bg-green-500 mr-2"></span>
-            <span className="text-gray-300">Active Devices ({topology.summary.active || 32})</span>
+            <span className="text-gray-500">Active Devices ({topology.summary.active || 32})</span>
           </div>
           <div className="flex items-center text-xs">
             <span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
-            <span className="text-gray-300">Alert Status ({topology.summary.alert || 4})</span>
+            <span className="text-gray-500">Alert Status ({topology.summary.alert || 4})</span>
           </div>
           <div className="flex items-center text-xs">
             <span className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></span>
-            <span className="text-gray-300">Warning Status ({topology.summary.warning || 6})</span>
+            <span className="text-gray-500">Warning Status ({topology.summary.warning || 6})</span>
           </div>
           <div className="flex items-center text-xs">
             <span className="w-3 h-3 rounded-full bg-gray-500 mr-2"></span>
-            <span className="text-gray-300">Inactive ({topology.summary.inactive || 2})</span>
+            <span className="text-gray-500">Inactive ({topology.summary.inactive || 2})</span>
           </div>
         </div>
       </CardContent>

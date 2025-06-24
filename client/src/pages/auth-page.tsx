@@ -85,12 +85,12 @@ const AuthPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#080a0e] p-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#11131a] p-4">
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
         {/* Partie gauche: Formulaire */}
         <Card className="bg-[#11131a] border-[#1a1d25] w-full">
           <CardHeader className="space-y-1 flex flex-col items-center">
-            <FirewallLogo className="w-12 h-12 mb-2" />
+            <FirewallLogo className="w-32 h-32 mb-2" />
             <CardTitle className="text-2xl font-bold text-white">
               {isLogin ? 'Connexion' : 'Créer un compte'}
             </CardTitle>
@@ -263,8 +263,8 @@ const AuthPage: React.FC = () => {
         
         {/* Partie droite: Description */}
         <div className="hidden md:flex flex-col justify-center p-6">
-          <h1 className="text-4xl font-bold text-white mb-4">FirewallAI</h1>
-          <h2 className="text-2xl font-semibold text-primary-400 mb-6">Protection intelligente pour votre réseau</h2>
+          <h1 className="text-4xl font-bold text-blue-300 mb-4">FirewallAI</h1>
+          <h2 className="text-2xl font-semibold text-gray-300 mb-6">Protection intelligente pour votre réseau</h2>
           
           <div className="space-y-4 text-gray-300">
             <div className="flex items-start">
@@ -274,7 +274,7 @@ const AuthPage: React.FC = () => {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-medium text-white">Protection avancée</h3>
+                <h3 className="text-lg font-medium text-blue-300">Protection avancée</h3>
                 <p className="text-gray-400">Système de pare-feu de nouvelle génération avec détection des intrusions et analyse comportementale.</p>
               </div>
             </div>
@@ -286,7 +286,7 @@ const AuthPage: React.FC = () => {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-medium text-white">IA intégrée</h3>
+                <h3 className="text-lg font-medium text-blue-300">IA intégrée</h3>
                 <p className="text-gray-400">Détection et analyse intelligente des menaces avec apprentissage automatique.</p>
               </div>
             </div>
@@ -298,7 +298,7 @@ const AuthPage: React.FC = () => {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-medium text-white">Surveillance en temps réel</h3>
+                <h3 className="text-lg font-medium text-blue-300">Surveillance en temps réel</h3>
                 <p className="text-gray-400">Tableau de bord avancé avec visualisation du trafic réseau et alertes en temps réel.</p>
               </div>
             </div>

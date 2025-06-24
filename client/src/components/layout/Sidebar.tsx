@@ -28,8 +28,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   return (
     <aside className={sidebarClasses}>
       {/* Logo area */}
-      <div className="flex items-center justify-center h-16 border-b border-[#1a1d25]">
-        <FirewallLogo className="h-10" />
+      <div className="flex items-center justify-center h-36 border-b border-[#1a1d25]">
+        <FirewallLogo className="h-36" />
       </div>
       
       {/* Navigation links */}
@@ -41,7 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               const linkClasses = `flex items-center gap-3 px-4 py-3 text-sm rounded-lg ${
                 isActive 
                   ? 'text-white bg-primary-600' 
-                  : 'text-gray-300 hover:bg-[#1a1d25]'
+                  : 'text-gray-400 hover:bg-[#1a1d25]'
               }`;
               
               return (

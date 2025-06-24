@@ -22,20 +22,20 @@ const mockData = {
     status: {
       protectionStatus: {
         status: 'Active',
-        lastUpdated: '2 minutes ago'
+        lastUpdated: '0 minutes ago'
       },
       threatsBlocked: {
-        count: 1284,
-        percentChange: 28,
+        count: 0,
+        percentChange: 0,
         period: 'Today'
       },
       systemHealth: {
-        percentage: 98,
+        percentage: 100,
         status: 'Healthy'
       },
       activeDevices: {
-        count: 42,
-        newDevices: 3
+        count: 0,
+        newDevices: 0
       }
     }
   },
@@ -45,7 +45,7 @@ const mockData = {
       {
         id: '1',
         type: 'Critical',
-        title: 'Critical Alert',
+        title: 'Test',
         message: 'Multiple intrusion attempts detected from IP 185.234.52.11 - Automatically blocked for 24h',
         timestamp: new Date().toISOString()
       }
@@ -194,18 +194,6 @@ const mockData = {
         sender: 'ai',
         content: "Hello! I'm your FirewallAI assistant. How can I help you today?",
         timestamp: new Date(Date.now() - 300000).toISOString()
-      },
-      {
-        id: '2',
-        sender: 'user',
-        content: 'Can you explain why there was a spike in blocked traffic around 3pm?',
-        timestamp: new Date(Date.now() - 240000).toISOString()
-      },
-      {
-        id: '3',
-        sender: 'ai',
-        content: "I analyzed the spike at 3pm and found it was primarily due to a distributed port scan attempt from multiple IPs originating from the same ASN. The system automatically blocked these IPs and raised the threat level temporarily. Would you like me to show you the detailed logs?",
-        timestamp: new Date(Date.now() - 180000).toISOString()
       }
     ]
   },
@@ -213,13 +201,13 @@ const mockData = {
   edrStatus: {
     status: {
       endpointCoverage: {
-        percentage: 98,
-        protected: 42,
-        total: 43
+        percentage: 0,
+        protected: 0,
+        total: 0
       },
       detectionRate: {
-        percentage: 99.7,
-        lastCalibration: '4 hours ago'
+        percentage: 0,
+        lastCalibration: '0 hours ago'
       }
     }
   },
@@ -228,31 +216,17 @@ const mockData = {
     activities: [
       {
         id: '1',
-        device: 'DEV-LAPTOP-03',
+        device: 'Test',
         activity: 'System update completed successfully',
         status: 'normal',
         timestamp: '10 minutes ago'
       },
       {
         id: '2',
-        device: 'ACCOUNTING-PC-12',
+        device: 'Test 2',
         activity: 'New application installed: Excel-Viewer.exe',
         status: 'warning',
         timestamp: '35 minutes ago'
-      },
-      {
-        id: '3',
-        device: 'MARKETING-PC-05',
-        activity: 'Unusual process activity detected: svchost.exe',
-        status: 'warning',
-        timestamp: '1 hour ago'
-      },
-      {
-        id: '4',
-        device: 'SERVER-BACKUP-02',
-        activity: 'Agent disconnected - manual check required',
-        status: 'offline',
-        timestamp: '2 hours ago'
       }
     ]
   },
