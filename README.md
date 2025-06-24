@@ -19,7 +19,7 @@ Une interface front-end professionnelle pour FirewallAI, offrant une solution de
 
 ### 1. Cloner le projet
 ```bash
-git clone <votre-repo-url>
+git clone https://github.com/FirewallIA/FirewallAI_InterfaceWeb.git
 cd firewallai-interface
 ```
 
