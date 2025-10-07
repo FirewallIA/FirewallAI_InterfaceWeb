@@ -14,7 +14,7 @@ Une interface front-end professionnelle pour FirewallAI, offrant une solution de
 ## Installation et Démarrage Rapide
 
 ### Prérequis
-- Node.js (version 18 ou supérieure)
+- Node.js (version 20.19.5 ou supérieure)
 - npm
 
 ### 1. Cloner le projet
@@ -31,6 +31,10 @@ npm install
 ### 3. Démarrer l'application
 ```bash
 npm run dev
+
+ou
+
+./start.sh
 ```
 
 L'application sera accessible à l'adresse : **http://localhost:5000**
