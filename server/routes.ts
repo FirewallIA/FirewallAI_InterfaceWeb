@@ -5,8 +5,11 @@ import { WebSocketServer } from 'ws';
 import { setupAuth } from "./auth";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
+import { FirewallClient } from "./firewall_client";
 
 const scryptAsync = promisify(scrypt);
+// Initialise le client gRPC
+const firewallClient = new FirewallClient();
 
 // Middleware pour vérifier si l'utilisateur est authentifié
 const ensureAuthenticated = (req: Request, res: Response, next: NextFunction) => {
@@ -279,7 +282,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     { method: 'get', path: '/api/network/interfaces', handler: (req, res) => res.json({ message: "Not implemented yet" }) },
     
     // Firewall routes (protégées)
-    { method: 'get', path: '/api/firewall/rules', handler: (req, res) => res.json(mockData.firewallRules) },
+    {
+      method: 'get',
+      path: '/api/firewall/status',
+      handler: async (req, res) => {
+        try {
+          const status = await firewallClient.getStatus();
+          res.json(status);
+        } catch (err: any) {
+          console.error("Erreur gRPC GetStatus:", err);
+          res.status(500).json({ message: "Erreur de communication avec le pare-feu" });
+        }
+      },
+    },
+    {
+      method: 'get',
+      path: '/api/firewall/rules',
+      handler: async (req, res) => {
+        try {
+          const rules = await firewallClient.listRules();
+          res.json(rules);
+        } catch (err: any) {
+          console.error("Erreur gRPC ListRules:", err);
+          res.status(500).json({ message: "Erreur de communication avec le pare-feu" });
+        }
+      },
+    },
+    {
+      method: 'post',
+      path: '/api/firewall/rules',
+      handler: async (req, res) => {
+        try {
+          const rule = req.body; // { source_ip, dest_ip, ... }
+          const resp = await firewallClient.createRule(rule);
+          res.json(resp);
+        } catch (err: any) {
+          console.error("Erreur gRPC CreateRule:", err);
+          res.status(500).json({ message: "Erreur lors de la création de la règle" });
+        }
+      },
+    },
+    {
+      method: 'delete',
+      path: '/api/firewall/rules/:id',
+      handler: async (req, res) => {
+        try {
+          const id = parseInt(req.params.id);
+          const resp = await firewallClient.deleteRule(id);
+          res.json(resp);
+        } catch (err: any) {
+          console.error("Erreur gRPC DeleteRule:", err);
+          res.status(500).json({ message: "Erreur lors de la suppression de la règle" });
+        }
+      },
+  },
     
     // Logs routes (protégées)
     { method: 'get', path: '/api/logs/analysis', handler: (req, res) => res.json(mockData.logAnalysis) },
