@@ -27,7 +27,7 @@ export class FirewallClient {
   private client: any;
 
   constructor(
-    address: string = process.env.FIREWALL_GRPC_ADDR || "127.0.0.1:50051",
+    address: string = process.env.FIREWALL_GRPC_ADDR || "http://127.0.0.1:50051",
     creds: grpc.ChannelCredentials = grpc.credentials.createInsecure()
   ) {
     this.client = new firewallProto.FirewallService(address, creds);
