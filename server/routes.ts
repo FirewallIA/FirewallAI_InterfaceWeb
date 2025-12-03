@@ -302,11 +302,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const rules = await firewallClient.listRules();
           res.json(rules);
+          console.log(rules)
         } catch (err: any) {
           console.error("Erreur gRPC ListRules:", err);
           res.status(500).json({ message: "Erreur de communication avec le pare-feu" });
         }
+        
       },
+      
     },
     {
       method: 'post',
