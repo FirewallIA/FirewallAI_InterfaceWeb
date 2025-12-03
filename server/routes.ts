@@ -301,7 +301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       handler: async (req, res) => {
         try {
           const rules = await firewallClient.listRules();
-          res.json(mockData.rules);
+          res.json({rules});
           console.log(rules)
         } catch (err: any) {
           console.error("Erreur gRPC ListRules:", err);
