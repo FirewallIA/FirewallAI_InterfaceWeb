@@ -296,20 +296,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
     },
     {
-      method: 'get',
+     method: 'get',
       path: '/api/firewall/rules',
       handler: async (req, res) => {
         try {
-          const rules = await firewallClient.listRules();
-          res.json({rules});
-          console.log(rules)
+          // 1. Récupération des données brutes du gRPC
+          // rawResponse ressemble à : { rules: [ { id: 1, source_ip: '...', ... } ] }
+          const rawResponse = await firewallClient.listRules();
+          
+          // 2. Transformation des données pour le Frontend
+          // On s'assure que rawResponse.rules existe, sinon tableau vide
+          const rawRules = rawResponse.rules || [];
+
+          const formattedRules = rawRules.map((r: any) => ({
+            id: r.id.toString(),      // Le frontend attend souvent des ID en string pour les clés React
+            name: r.name || 'Unnamed Rule',
+            source: r.source_ip,      // Mapping: source_ip -> source
+            destination: r.dest_ip,   // Mapping: dest_ip -> destination
+            port: r.dest_port,        // Mapping: dest_port -> port
+            protocol: r.protocol,
+            action: r.action,
+            
+            // 3. Ajout des champs cosmétiques manquants en BDD mais requis par l'UI
+            status: 'Active',         // Par défaut, si elle est dans BPF, elle est Active
+            type: 'Inbound',          // Valeur par défaut (ou logique conditionnelle selon IP)
+            usage_count: r.usage_count // Optionnel, si ton UI l'utilise
+          }));
+
+          // 4. Envoi direct de l'objet { rules: [...] } sans double imbrication
+          res.json({ rules: formattedRules });
+          
         } catch (err: any) {
           console.error("Erreur gRPC ListRules:", err);
           res.status(500).json({ message: "Erreur de communication avec le pare-feu" });
         }
-        
       },
-      
     },
     {
       method: 'post',
