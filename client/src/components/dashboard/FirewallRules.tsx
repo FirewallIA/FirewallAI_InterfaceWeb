@@ -24,21 +24,22 @@ const FirewallRules: React.FC = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      // refetch() force React Query à refaire l'appel API
       await refetch();
     } catch (err) {
       console.error("Erreur lors du rafraîchissement", err);
     } finally {
-      // Petit timeout esthétique pour laisser l'animation se terminer
       setTimeout(() => setIsRefreshing(false), 500);
     }
   };
 
+  // --- FONCTION DELETE (Modifiée: sans confirmation) ---
   const handleDeleteRule = async (id: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer cette règle ?")) return;
+    // J'ai supprimé la ligne de confirmation ici.
+    // L'action est maintenant immédiate.
 
     try {
-      setIsDeleting(id);
+      setIsDeleting(id); // Feedback visuel immédiat (spinner)
+      
       const response = await fetch(`/api/firewall/rules/${id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
@@ -46,7 +47,7 @@ const FirewallRules: React.FC = () => {
 
       if (!response.ok) throw new Error("Erreur lors de la suppression");
 
-      await refetch(); // Mise à jour après suppression
+      await refetch(); // Mise à jour de la liste
       
     } catch (err: any) {
       console.error(err);
@@ -63,7 +64,6 @@ const FirewallRules: React.FC = () => {
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-white">Firewall Rules</CardTitle>
           <div className="flex space-x-2">
-            {/* Bouton Refresh désactivé */}
             <Button variant="outline" size="sm" className="h-7 bg-[#1a1d25]" disabled>
               <i className="ri-refresh-line"></i>
             </Button>
@@ -123,7 +123,6 @@ const FirewallRules: React.FC = () => {
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-white">Firewall Rules</CardTitle>
         <div className="flex space-x-2">
-          {/* BOUTON REFRESH AJOUTÉ */}
           <Button
             variant="outline"
             size="sm"
