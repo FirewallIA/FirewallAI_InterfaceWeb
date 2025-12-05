@@ -5,12 +5,12 @@ import { useFirewallRules } from '@/lib/data';
 import { FirewallRule } from '@/lib/types';
 
 const FirewallRules: React.FC = () => {
-  // CHANGEMENT ICI : On récupère 'refetch' au lieu de 'mutate'
-  // React Query renvoie automatiquement cette fonction.
+  // On récupère refetch de React Query
   const { data, isLoading, error, refetch } = useFirewallRules();
-
-  // État pour l'animation de chargement sur le bouton delete
+  
+  // États pour les animations
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleAddRule = () => {
     alert('Add rule functionality would be implemented here');
@@ -20,29 +20,34 @@ const FirewallRules: React.FC = () => {
     alert(`Edit rule ${id}`);
   };
 
+  // --- FONCTION REFRESH ---
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      // refetch() force React Query à refaire l'appel API
+      await refetch();
+    } catch (err) {
+      console.error("Erreur lors du rafraîchissement", err);
+    } finally {
+      // Petit timeout esthétique pour laisser l'animation se terminer
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
   const handleDeleteRule = async (id: string) => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer cette règle ?")) return;
 
     try {
-      setIsDeleting(id); // Active l'icône de chargement
-
-      // 1. Appel API de suppression
+      setIsDeleting(id);
       const response = await fetch(`/api/firewall/rules/${id}`, {
         method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
 
-      if (!response.ok) {
-        throw new Error("Erreur lors de la suppression");
-      }
+      if (!response.ok) throw new Error("Erreur lors de la suppression");
 
-      // 2. MAGIE REACT QUERY : On rafraîchit seulement ce bloc
-      await refetch();
+      await refetch(); // Mise à jour après suppression
       
-      console.log(`Règle ${id} supprimée`);
-
     } catch (err: any) {
       console.error(err);
       alert("Erreur: Impossible de supprimer la règle");
@@ -51,16 +56,21 @@ const FirewallRules: React.FC = () => {
     }
   };
 
-  // --- Le reste de l'affichage (Loading / Error) reste identique ---
-
+  // --- VUE CHARGEMENT ---
   if (isLoading) {
     return (
       <Card className="bg-[#11131a] border-[#1a1d25]">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-white">Firewall Rules</CardTitle>
-          <Button className="bg-primary-600 text-white text-xs h-8" disabled>
-            <i className="ri-add-line mr-1"></i> Add Rule
-          </Button>
+          <div className="flex space-x-2">
+            {/* Bouton Refresh désactivé */}
+            <Button variant="outline" size="sm" className="h-7 bg-[#1a1d25]" disabled>
+              <i className="ri-refresh-line"></i>
+            </Button>
+            <Button className="bg-primary-600 text-white text-xs h-7" disabled>
+              <i className="ri-add-line mr-1"></i> Add Rule
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="animate-pulse space-y-3">
@@ -73,9 +83,29 @@ const FirewallRules: React.FC = () => {
     );
   }
 
+  // --- VUE ERREUR ---
   if (error) {
     return (
       <Card className="bg-[#11131a] border-[#1a1d25]">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-white">Firewall Rules</CardTitle>
+          <div className="flex space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="bg-[#1a1d25] hover:bg-[#222631] h-7"
+              onClick={handleRefresh}
+            >
+              <i className="ri-refresh-line"></i>
+            </Button>
+            <Button
+              className="bg-primary-600 hover:bg-primary-500 text-white text-xs h-7"
+              onClick={handleAddRule}
+            >
+              <i className="ri-add-line mr-1"></i> Add Rule
+            </Button>
+          </div>
+        </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-red-400">
             Error loading firewall rules
@@ -87,17 +117,33 @@ const FirewallRules: React.FC = () => {
 
   const rules: FirewallRule[] = data?.rules || [];
 
+  // --- VUE PRINCIPALE ---
   return (
     <Card className="bg-[#11131a] border-[#1a1d25]">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-white">Firewall Rules</CardTitle>
-        <Button
-          className="bg-primary-600 hover:bg-primary-500 text-white text-xs h-8"
-          onClick={handleAddRule}
-        >
-          <i className="ri-add-line mr-1"></i> Add Rule
-        </Button>
+        <div className="flex space-x-2">
+          {/* BOUTON REFRESH AJOUTÉ */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-[#1a1d25] hover:bg-[#222631] h-7 text-gray-400 hover:text-white border-[#2a2e3b]"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Rafraîchir la liste"
+          >
+            <i className={`ri-refresh-line ${isRefreshing ? 'animate-spin' : ''}`}></i>
+          </Button>
+
+          <Button
+            className="bg-primary-600 hover:bg-primary-500 text-white text-xs h-7"
+            onClick={handleAddRule}
+          >
+            <i className="ri-add-line mr-1"></i> Add Rule
+          </Button>
+        </div>
       </CardHeader>
+      
       <CardContent>
         <div className="overflow-x-auto">
           <table className="min-w-full">
@@ -143,7 +189,6 @@ const FirewallRules: React.FC = () => {
                           <i className="ri-edit-line"></i>
                         </button>
                         
-                        {/* BOUTON DELETE CONNECTÉ */}
                         <button 
                           className={`${isDeleting === rule.id ? 'text-red-700' : 'text-gray-400 hover:text-red-500'}`}
                           onClick={() => handleDeleteRule(rule.id)}
