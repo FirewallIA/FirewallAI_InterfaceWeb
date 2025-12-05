@@ -351,6 +351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       path: '/api/firewall/rules/:id',
       handler: async (req, res) => {
         try {
+          console.log(`[API] Demande de suppression pour l'ID: ${req.params.id}`); // <--- Log ajoutée
           const id = parseInt(req.params.id);
           const resp = await firewallClient.deleteRule(id);
           res.json(resp);
