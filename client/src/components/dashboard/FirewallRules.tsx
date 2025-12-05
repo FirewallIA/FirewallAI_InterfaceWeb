@@ -5,11 +5,11 @@ import { useFirewallRules } from '@/lib/data';
 import { FirewallRule } from '@/lib/types';
 
 const FirewallRules: React.FC = () => {
-  // 1. On récupère 'mutate' depuis le hook pour rafraîchir la liste après suppression
-  // Si ton hook ne retourne pas mutate, il faudra l'ajouter dans @/lib/data
-  const { data, isLoading, error, mutate } = useFirewallRules();
-  
-  // État local pour gérer un chargement pendant la suppression (éviter le double clic)
+  // CHANGEMENT ICI : On récupère 'refetch' au lieu de 'mutate'
+  // React Query renvoie automatiquement cette fonction.
+  const { data, isLoading, error, refetch } = useFirewallRules();
+
+  // État pour l'animation de chargement sur le bouton delete
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const handleAddRule = () => {
@@ -20,50 +20,38 @@ const FirewallRules: React.FC = () => {
     alert(`Edit rule ${id}`);
   };
 
-  // --- FONCTION DE SUPPRESSION CONNECTÉE ---
   const handleDeleteRule = async (id: string) => {
-    // 1. Confirmation utilisateur
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette règle ?")) {
-      return;
-    }
+    if (!confirm("Êtes-vous sûr de vouloir supprimer cette règle ?")) return;
 
     try {
-      // Indiquer visuellement que ça charge pour cet ID spécifique
-      setIsDeleting(id);
+      setIsDeleting(id); // Active l'icône de chargement
 
-      // 2. Appel à ton API Node.js (qui appellera gRPC)
+      // 1. Appel API de suppression
       const response = await fetch(`/api/firewall/rules/${id}`, {
         method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
-          // Ajoute ton header d'auth ici si nécessaire (ex: Authorization: `Bearer ${token}`)
-        },
+            'Content-Type': 'application/json'
+        }
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Erreur lors de la suppression");
+        throw new Error("Erreur lors de la suppression");
       }
 
-      // 3. Rafraîchissement des données (Revalidation)
-      // Cela va relancer l'appel GET en arrière-plan et mettre à jour le tableau
-      if (mutate) {
-        await mutate(); 
-      } else {
-        // Fallback si mutate n'est pas dispo (moins propre mais fonctionnel)
-        window.location.reload(); 
-      }
+      // 2. MAGIE REACT QUERY : On rafraîchit seulement ce bloc
+      await refetch();
       
-      console.log(`Règle ${id} supprimée avec succès`);
+      console.log(`Règle ${id} supprimée`);
 
     } catch (err: any) {
-      console.error("Erreur Delete:", err);
-      alert(`Impossible de supprimer la règle : ${err.message}`);
+      console.error(err);
+      alert("Erreur: Impossible de supprimer la règle");
     } finally {
-      // Arrêter l'état de chargement
       setIsDeleting(null);
     }
   };
+
+  // --- Le reste de l'affichage (Loading / Error) reste identique ---
 
   if (isLoading) {
     return (
@@ -76,10 +64,9 @@ const FirewallRules: React.FC = () => {
         </CardHeader>
         <CardContent>
           <div className="animate-pulse space-y-3">
-             {/* Skeleton loader simple */}
-             <div className="h-8 bg-gray-700 rounded w-full"></div>
-             <div className="h-8 bg-gray-700 rounded w-full"></div>
-             <div className="h-8 bg-gray-700 rounded w-full"></div>
+            <div className="h-8 bg-gray-700 rounded w-full"></div>
+            <div className="h-8 bg-gray-700 rounded w-full"></div>
+            <div className="h-8 bg-gray-700 rounded w-full"></div>
           </div>
         </CardContent>
       </Card>
@@ -158,10 +145,9 @@ const FirewallRules: React.FC = () => {
                         
                         {/* BOUTON DELETE CONNECTÉ */}
                         <button 
-                          className={`${isDeleting === rule.id ? 'text-red-700 animate-pulse' : 'text-gray-400 hover:text-red-500'}`}
+                          className={`${isDeleting === rule.id ? 'text-red-700' : 'text-gray-400 hover:text-red-500'}`}
                           onClick={() => handleDeleteRule(rule.id)}
                           disabled={isDeleting === rule.id}
-                          title="Supprimer la règle"
                         >
                           {isDeleting === rule.id ? (
                             <i className="ri-loader-4-line animate-spin"></i>
@@ -169,7 +155,6 @@ const FirewallRules: React.FC = () => {
                             <i className="ri-delete-bin-line"></i>
                           )}
                         </button>
-
                       </div>
                     </td>
                   </tr>
