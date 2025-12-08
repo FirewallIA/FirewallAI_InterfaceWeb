@@ -241,7 +241,7 @@ const FirewallRules: React.FC = () => {
               <tr className="text-left text-xs text-gray-400 border-b border-[#1a1d25]">
                 <th className="pb-2 font-medium">Name</th>
                 <th className="pb-2 font-medium">Proto</th>
-                <th className="pb-2 font-medium">Source -> Dest</th>
+                <th className="pb-2 font-medium">"Source -> Dest"</th>
                 <th className="pb-2 font-medium">Action</th>
                 <th className="pb-2 font-medium">Actions</th>
               </tr>
