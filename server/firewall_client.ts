@@ -68,4 +68,15 @@ export class FirewallClient {
       });
     });
   }
+ 
+  getTrafficStats(timeRange: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      // Attention: La clé doit correspondre au nom dans le .proto (time_range)
+      this.client.GetTrafficStats({ time_range: timeRange }, (err: any, response: any) => {
+        if (err) reject(err);
+        else resolve(response);
+      });
+    });
+  }
+
 }
