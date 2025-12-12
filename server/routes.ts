@@ -277,7 +277,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     { method: 'get', path: '/api/threats/latest', handler: (req, res) => res.json(mockData.threats) },
     
     // Network routes (protégées)
-    { method: 'get', path: '/api/network/traffic', handler: (req, res) => res.json(mockData.networkTraffic) },
+     { 
+      method: 'get', 
+      path: '/api/network/traffic', 
+      handler: async (req, res) => {
+        try {
+          // 1. Récupération du paramètre 'range' (ex: ?range=1h)
+          const range = (req.query.range as string) || '24h';
+
+          // 2. Mapping Frontend (React) -> Backend (Rust)
+          let rustRange = range;
+          if (range === '7d') rustRange = '1w';     // Rust attend "1w"
+          if (range === '30d') rustRange = '30d';   // Rust attend "30d"
+
+          // 3. Appel gRPC
+          const response = await firewallClient.getTrafficStats(rustRange);
+
+          // 4. Formatage des données pour le Graphique
+          // On détermine si on affiche l'heure (HH:mm) ou la date (DD/MM)
+          const showDate = ['7d', '30d', '1w', 'month'].includes(rustRange);
+          
+          const chartData = (response.chart_data || []).map((point: any) => {
+            // Conversion timestamp (secondes) -> Date JS (millisecondes)
+            const date = new Date(Number(point.timestamp) * 1000);
+            
+            const timeLabel = showDate 
+              ? date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) // ex: 12/12
+              : date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); // ex: 14:30
+
+            return {
+              timestamp: Number(point.timestamp),
+              time: timeLabel,
+              inbound: Number(point.inbound),
+              outbound: Number(point.outbound),
+              blocked: Number(point.blocked),
+            };
+          });
+
+          // 5. Envoi de la réponse JSON
+          res.json({
+            time_period: response.time_period,
+            total_inbound: Number(response.total_inbound),
+            total_outbound: Number(response.total_outbound),
+            total_blocked: Number(response.total_blocked),
+            chart_data: chartData 
+          });
+
+        } catch (err) {
+          console.error("Erreur API Traffic:", err);
+          // En cas d'erreur (ex: DB vide au début), on peut renvoyer le mock ou une erreur
+          res.status(500).json({ message: "Erreur de récupération des stats trafic" });
+        }
+      } 
+    },
     { method: 'get', path: '/api/network/topology', handler: (req, res) => res.json(mockData.networkTopology) },
     { method: 'get', path: '/api/network/interfaces', handler: (req, res) => res.json({ message: "Not implemented yet" }) },
     

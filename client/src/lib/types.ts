@@ -141,3 +141,19 @@ export interface LogSummary {
   errors: number;
   critical: number;
 }
+
+export interface TrafficPoint {
+  time: string;      // Label formaté (ex: "14:30" ou "Lun 12")
+  timestamp: number; // Valeur brute pour trier si besoin
+  inbound: number;
+  outbound: number;
+  blocked: number;
+}
+
+export interface TrafficData {
+  total_inbound: number;
+  total_outbound: number;
+  total_blocked: number;
+  time_period: string;
+  chart_data: TrafficPoint[]; // Le tableau pour le LineChart
+}
