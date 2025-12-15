@@ -55,21 +55,9 @@ const mockData = {
     ]
   },
   
+  // Note: networkTraffic mock is removed from usage below, but kept here if needed for fallback
   networkTraffic: {
-    data: [
-      { time: '00:00', inbound: 120, outbound: 80, blocked: 5 },
-      { time: '02:00', inbound: 90, outbound: 60, blocked: 2 },
-      { time: '04:00', inbound: 70, outbound: 50, blocked: 1 },
-      { time: '06:00', inbound: 120, outbound: 80, blocked: 3 },
-      { time: '08:00', inbound: 180, outbound: 100, blocked: 10 },
-      { time: '10:00', inbound: 250, outbound: 150, blocked: 15 },
-      { time: '12:00', inbound: 270, outbound: 180, blocked: 13 },
-      { time: '14:00', inbound: 290, outbound: 200, blocked: 20 },
-      { time: '16:00', inbound: 310, outbound: 230, blocked: 18 },
-      { time: '18:00', inbound: 250, outbound: 170, blocked: 12 },
-      { time: '20:00', inbound: 200, outbound: 120, blocked: 8 },
-      { time: '22:00', inbound: 150, outbound: 90, blocked: 6 }
-    ]
+    data: []
   },
   
   threats: {
@@ -114,52 +102,7 @@ const mockData = {
   },
   
   firewallRules: {
-    rules: [
-      {
-        id: '1',
-        name: 'Block Malicious IPs',
-        type: 'Inbound',
-        status: 'Active',
-        protocol: 'Any',
-        port: 'Any',
-        source: 'Blacklist',
-        destination: 'Any',
-        action: 'Block'
-      },
-      {
-        id: '2',
-        name: 'Allow HTTPS Traffic',
-        type: 'Outbound',
-        status: 'Active',
-        protocol: 'TCP',
-        port: '443',
-        source: 'Any',
-        destination: 'Any',
-        action: 'Allow'
-      },
-      {
-        id: '3',
-        name: 'Block P2P Traffic',
-        type: 'Outbound',
-        status: 'Disabled',
-        protocol: 'TCP/UDP',
-        port: 'Multiple',
-        source: 'Any',
-        destination: 'Any',
-        action: 'Block'
-      },
-      {
-        id: '4',
-        name: 'DMZ Access',
-        type: 'Inbound',
-        status: 'Active',
-        protocol: 'TCP',
-        port: '80,443',
-        source: 'Any',
-        destination: 'DMZ',
-        action: 'Allow'
-      }
-    ]
+    rules: []
   },
   
   networkTopology: {
@@ -276,34 +219,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     { method: 'get', path: '/api/alerts', handler: (req, res) => res.json(mockData.alerts) },
     { method: 'get', path: '/api/threats/latest', handler: (req, res) => res.json(mockData.threats) },
     
-    // Network routes (protégées)
+    // =========================================================================
+    //  NETWORK TRAFFIC (MODIFIÉ POUR gRPC)
+    // =========================================================================
      { 
       method: 'get', 
       path: '/api/network/traffic', 
       handler: async (req, res) => {
         try {
-          // 1. Récupération du paramètre 'range' (ex: ?range=1h)
+          // 1. Récupération du paramètre 'range' envoyé par le Frontend
           const range = (req.query.range as string) || '24h';
 
           // 2. Mapping Frontend (React) -> Backend (Rust)
+          // Rust attend "1w" pour 7 jours et "month" pour 30 jours
           let rustRange = range;
-          if (range === '7d') rustRange = '1w';     // Rust attend "1w"
-          if (range === '30d') rustRange = '30d';   // Rust attend "30d"
+          if (range === '7d') rustRange = '1w';
+          if (range === '30d') rustRange = 'month';
 
-          // 3. Appel gRPC
+          // 3. Appel gRPC vers Rust
           const response = await firewallClient.getTrafficStats(rustRange);
 
-          // 4. Formatage des données pour le Graphique
-          // On détermine si on affiche l'heure (HH:mm) ou la date (DD/MM)
+          // 4. Formatage de l'Axe X (Heure vs Date)
+          // - Si c'est 7d ou 30d : On veut voir la DATE (ex: 12/12)
+          // - Si c'est 5m, 1h, 24h : On veut voir l'HEURE (ex: 14:05)
           const showDate = ['7d', '30d', '1w', 'month'].includes(rustRange);
           
           const chartData = (response.chart_data || []).map((point: any) => {
             // Conversion timestamp (secondes) -> Date JS (millisecondes)
             const date = new Date(Number(point.timestamp) * 1000);
             
-            const timeLabel = showDate 
-              ? date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) // ex: 12/12
-              : date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); // ex: 14:30
+            let timeLabel;
+            if (showDate) {
+                // Format Date (12/12)
+                timeLabel = date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+            } else {
+                // Format Heure
+                if (range === '5m') {
+                    // Zoom précis (HH:mm:ss)
+                    timeLabel = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                } else {
+                    // Vue standard (HH:mm)
+                    timeLabel = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                }
+            }
 
             return {
               timestamp: Number(point.timestamp),
@@ -314,7 +272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
           });
 
-          // 5. Envoi de la réponse JSON
+          // 5. Envoi de la réponse JSON au Frontend
           res.json({
             time_period: response.time_period,
             total_inbound: Number(response.total_inbound),
@@ -325,11 +283,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         } catch (err) {
           console.error("Erreur API Traffic:", err);
-          // En cas d'erreur (ex: DB vide au début), on peut renvoyer le mock ou une erreur
           res.status(500).json({ message: "Erreur de récupération des stats trafic" });
         }
       } 
     },
+    // =========================================================================
+
     { method: 'get', path: '/api/network/topology', handler: (req, res) => res.json(mockData.networkTopology) },
     { method: 'get', path: '/api/network/interfaces', handler: (req, res) => res.json({ message: "Not implemented yet" }) },
     
@@ -352,30 +311,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       path: '/api/firewall/rules',
       handler: async (req, res) => {
         try {
-          // 1. Récupération des données brutes du gRPC
-          // rawResponse ressemble à : { rules: [ { id: 1, source_ip: '...', ... } ] }
           const rawResponse = await firewallClient.listRules();
-          
-          // 2. Transformation des données pour le Frontend
-          // On s'assure que rawResponse.rules existe, sinon tableau vide
           const rawRules = rawResponse.rules || [];
 
           const formattedRules = rawRules.map((r: any) => ({
-            id: r.id.toString(),      // Le frontend attend souvent des ID en string pour les clés React
+            id: r.id.toString(),
             name: r.name || 'Unnamed Rule',
-            source: r.source_ip,      // Mapping: source_ip -> source
-            destination: r.dest_ip,   // Mapping: dest_ip -> destination
-            port: r.dest_port,        // Mapping: dest_port -> port
+            source: r.source_ip,
+            destination: r.dest_ip,
+            port: r.dest_port,
             protocol: r.protocol,
             action: r.action,
-            
-            // 3. Ajout des champs cosmétiques manquants en BDD mais requis par l'UI
-            status: 'Active',         // Par défaut, si elle est dans BPF, elle est Active
-            type: 'Inbound',          // Valeur par défaut (ou logique conditionnelle selon IP)
-            usage_count: r.usage_count // Optionnel, si ton UI l'utilise
+            status: 'Active',
+            type: 'Inbound',
+            usage_count: r.usage_count
           }));
 
-          // 4. Envoi direct de l'objet { rules: [...] } sans double imbrication
           res.json({ rules: formattedRules });
           
         } catch (err: any) {
@@ -389,7 +340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       path: '/api/firewall/rules',
       handler: async (req, res) => {
         try {
-          const rule = req.body; // { source_ip, dest_ip, ... }
+          const rule = req.body;
           const resp = await firewallClient.createRule(rule);
           res.json(resp);
         } catch (err: any) {
@@ -403,7 +354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       path: '/api/firewall/rules/:id',
       handler: async (req, res) => {
         try {
-          console.log(`[API] Demande de suppression pour l'ID: ${req.params.id}`); // <--- Log ajoutée
+          console.log(`[API] Demande de suppression pour l'ID: ${req.params.id}`);
           const id = parseInt(req.params.id);
           const resp = await firewallClient.deleteRule(id);
           res.json(resp);
@@ -412,7 +363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           res.status(500).json({ message: "Erreur lors de la suppression de la règle" });
         }
       },
-  },
+    },
     
     // Logs routes (protégées)
     { method: 'get', path: '/api/logs/analysis', handler: (req, res) => res.json(mockData.logAnalysis) },
@@ -436,7 +387,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: 'Message content is required' });
         }
 
-        // Add user message to history
         const userMessage = {
           id: Date.now().toString(),
           sender: 'user',
@@ -445,7 +395,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         mockData.chatHistory.messages.push(userMessage);
 
-        // Simulate AI response
         setTimeout(() => {
           const aiMessage = {
             id: (Date.now() + 1).toString(),
@@ -471,7 +420,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         try {
           const users = await storage.getAllUsers();
-          // Remove password from response
           const safeUsers = users.map(user => {
             const { password, ...safeUser } = user;
             return safeUser;
@@ -499,7 +447,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(404).json({ message: "Utilisateur non trouvé" });
           }
           
-          // Remove password from response
           const { password, ...safeUser } = user;
           res.json(safeUser);
         } catch (error) {
@@ -513,7 +460,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       handler: async (req, res) => {
         const userId = parseInt(req.params.id);
         
-        // Vérifier les permissions
         if (req.user?.role !== 'admin' && userId !== req.user?.id) {
           return res.status(403).json({ message: "Permission denied" });
         }
@@ -525,12 +471,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(404).json({ message: "Utilisateur non trouvé" });
           }
           
-          // Un utilisateur standard ne peut pas changer son rôle
           if (req.user?.role !== 'admin' && req.body.role) {
             delete req.body.role;
           }
           
-          // Si un mot de passe est fourni, le hacher
           if (req.body.password) {
             const salt = randomBytes(16).toString("hex");
             const buf = (await scryptAsync(req.body.password, salt, 64)) as Buffer;
@@ -543,7 +487,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(500).json({ message: "Échec de la mise à jour de l'utilisateur" });
           }
           
-          // Remove password from response
           const { password, ...safeUser } = updatedUser;
           res.json(safeUser);
         } catch (error) {
@@ -555,14 +498,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       method: 'delete', 
       path: '/api/users/:id', 
       handler: async (req, res) => {
-        // Seul un admin peut supprimer des utilisateurs
         if (req.user?.role !== 'admin') {
           return res.status(403).json({ message: "Permission denied - Admin access required" });
         }
         
         const userId = parseInt(req.params.id);
         
-        // Empêcher la suppression de son propre compte
         if (userId === req.user.id) {
           return res.status(400).json({ message: "Vous ne pouvez pas supprimer votre propre compte" });
         }
@@ -607,14 +548,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   wss.on('connection', (ws) => {
     console.log('Client connected to WebSocket');
-    
-    // Send a welcome message to confirm connection
     ws.send(JSON.stringify({ type: 'connection', status: 'connected' }));
     
     ws.on('message', (message) => {
       console.log('Received message:', message);
       try {
-        // Echo back the message to confirm receipt
         ws.send(JSON.stringify({ type: 'echo', data: JSON.parse(message.toString()) }));
       } catch (err) {
         console.error('Error processing WebSocket message:', err);
