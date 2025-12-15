@@ -17,9 +17,22 @@ export function useSystemStatus() {
 }
 
 // Network Traffic
-export function useNetworkTraffic() {
+export function useNetworkTraffic(timeRange: string = "24h") {
   return useQuery({
-    queryKey: ['/api/network/traffic'],
+    // 1. La clé change quand timeRange change => Force le re-fetch
+    queryKey: ['/api/network/traffic', timeRange],
+    
+    // 2. On définit comment aller chercher les données avec le paramètre
+    queryFn: async () => {
+      const response = await fetch(`/api/network/traffic?range=${timeRange}`);
+      if (!response.ok) {
+        throw new Error('Erreur réseau lors de la récupération du trafic');
+      }
+      return response.json();
+    },
+    
+    // Optionnel : Rafraîchir toutes les 10 secondes automatiquement
+    refetchInterval: 10000, 
   });
 }
 
