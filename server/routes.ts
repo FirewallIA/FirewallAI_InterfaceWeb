@@ -364,6 +364,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       },
     },
+    {
+      method: 'put',
+      path: '/api/firewall/rules/:id',
+      handler: async (req, res) => {
+        try {
+          const id = parseInt(req.params.id);
+          const updatedData = req.body; 
+          
+          // Appel au client gRPC (assurez-vous d'avoir ajouté updateRule dans firewall_client.ts)
+          const resp = await firewallClient.updateRule(id, updatedData);
+          
+          res.json(resp);
+        } catch (err: any) {
+          console.error("Erreur gRPC UpdateRule:", err);
+          res.status(500).json({ message: "Erreur lors de la mise à jour de la règle" });
+        }
+      },
+    },
     
     // Logs routes (protégées)
     { method: 'get', path: '/api/logs/analysis', handler: (req, res) => res.json(mockData.logAnalysis) },

@@ -91,9 +91,43 @@ const FirewallRules: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<any>(null); // Stocke la règle en cours de modif
+  const [isUpdating, setIsUpdating] = useState(false);
+  const handleEditRule = (rule: FirewallRule) => {
+  setEditingRule({
+    id: rule.id,
+    name: rule.name,
+    source_ip: rule.source,
+    dest_ip: rule.destination,
+    source_port: rule.source_port || '*',
+    dest_port: rule.port,
+    protocol: rule.protocol,
+    action: rule.action.toLowerCase()
+  });
+  setIsEditModalOpen(true);
+  };
+  
+  const handleUpdateRule = async () => {
+    if (!editingRule.name.trim()) return alert("Nom obligatoire");
 
-  const handleEditRule = (id: string) => {
-    alert(`Edit rule ${id} - À implémenter`);
+    try {
+      setIsUpdating(true);
+      const response = await fetch(`/api/firewall/rules/${editingRule.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingRule)
+      });
+
+      if (!response.ok) throw new Error("Erreur lors de la modification");
+
+      setIsEditModalOpen(false);
+      await refetch();
+    } catch (err: any) {
+      alert(`Erreur: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   // --- UI HELPERS ---
@@ -233,7 +267,92 @@ const FirewallRules: React.FC = () => {
 
         </div>
       </CardHeader>
+        {/* MODAL EDIT */}
+  <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+    <DialogContent className="bg-[#1a1d25] border-[#2a2e3b] text-white">
+      <DialogHeader>
+        <DialogTitle>Edit Firewall Rule</DialogTitle>
+      </DialogHeader>
       
+      {editingRule && (
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Name</Label>
+            <Input 
+              value={editingRule.name} 
+              onChange={(e) => setEditingRule({...editingRule, name: e.target.value})}
+              className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+            />
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Action</Label>
+            <div className="col-span-3 flex gap-4">
+              <select 
+                className="flex h-9 w-full rounded-md border border-[#2a2e3b] bg-[#11131a] px-3 py-1 text-sm text-white"
+                value={editingRule.action}
+                onChange={(e) => setEditingRule({...editingRule, action: e.target.value})}
+              >
+                <option value="allow">Allow</option>
+                <option value="deny">Deny</option>
+              </select>
+              
+              <select 
+                className="flex h-9 w-full rounded-md border border-[#2a2e3b] bg-[#11131a] px-3 py-1 text-sm text-white"
+                value={editingRule.protocol}
+                onChange={(e) => setEditingRule({...editingRule, protocol: e.target.value})}
+              >
+                <option value="TCP">TCP</option>
+                <option value="UDP">UDP</option>
+                <option value="ICMP">ICMP</option>
+                <option value="any">Any</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Source IP</Label>
+            <Input 
+              value={editingRule.source_ip} 
+              onChange={(e) => setEditingRule({...editingRule, source_ip: e.target.value})}
+              className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+            />
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Dest IP</Label>
+            <Input 
+              value={editingRule.dest_ip} 
+              onChange={(e) => setEditingRule({...editingRule, dest_ip: e.target.value})}
+              className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+            />
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Dest Port</Label>
+            <Input 
+              value={editingRule.dest_port} 
+              onChange={(e) => setEditingRule({...editingRule, dest_port: e.target.value})}
+              className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+            />
+          </div>
+        </div>
+      )}
+
+      <DialogFooter>
+        <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="border-[#2a2e3b] text-white">
+          Cancel
+        </Button>
+        <Button 
+            onClick={handleUpdateRule} 
+            className="bg-primary-600 hover:bg-primary-500 text-white"
+            disabled={isUpdating}
+        >
+          {isUpdating ? "Updating..." : "Save Changes"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
       <CardContent>
         <div className="overflow-x-auto">
           <table className="min-w-full">
@@ -277,10 +396,13 @@ const FirewallRules: React.FC = () => {
                     </td>
                     <td className="py-3">
                       <div className="flex space-x-2">
-                        <button className="text-gray-400 hover:text-white" onClick={() => handleEditRule(rule.id)}>
-                          <i className="ri-edit-line"></i>
-                        </button>
                         <button 
+                        className="text-gray-400 hover:text-white" 
+                        onClick={() => handleEditRule(rule)} // On envoie l'objet entier au lieu de juste l'ID
+                      >
+                        <i className="ri-edit-line"></i>
+                      </button>
+                          <button 
                           className={`${isDeleting === rule.id ? 'text-red-700' : 'text-gray-400 hover:text-red-500'}`}
                           onClick={() => handleDeleteRule(rule.id)}
                           disabled={isDeleting === rule.id}

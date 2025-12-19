@@ -68,6 +68,15 @@ export class FirewallClient {
       });
     });
   }
+
+  updateRule(id: number, rule: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.client.UpdateRule({ id, rule }, (err: any, response: any) => {
+        if (err) reject(err);
+        else resolve(response);
+      });
+    });
+  } 
  
   getTrafficStats(timeRange: string): Promise<any> {
     return new Promise((resolve, reject) => {
