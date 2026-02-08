@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge'; // Assumant que vous avez un composant Badge, sinon on utilisera un span
+import { Badge } from '@/components/ui/badge';
+import * as grpcWeb from 'grpc-web';
 
-// Simulation de type de données pour les logs
+// --- IMPORTS DES FICHIERS GÉNÉRÉS (A adapter selon votre structure) ---
+// import { FirewallServiceClient } from '../generated/firewall_grpc_web_pb';
+// import { Empty } from 'google-protobuf/google/protobuf/empty_pb';
+// Si vous n'avez pas encore généré les fichiers, commentez les imports ci-dessus 
+// et lisez la note en bas du code.
+
 interface TrafficLog {
   id: string;
   timestamp: string;
@@ -15,38 +21,125 @@ interface TrafficLog {
   action: 'ALLOWED' | 'BLOCKED' | 'ALERT';
 }
 
+// Fonction utilitaire pour parser le message brut venant du Rust
+// Format attendu : "TRAFFIC ALLOW | Proto: 6 | 192.168.1.1:1234 -> 10.0.0.1:80"
+const parseLogMessage = (rawMsg: string, timestamp: string): TrafficLog | null => {
+  try {
+    const regex = /TRAFFIC (ALLOW|DENY) \| Proto: (\d+) \| ([\d\.]+):(\d+) -> ([\d\.]+):(\d+)/;
+    const match = rawMsg.match(regex);
+
+    if (!match) return null;
+
+    const [_, actionStr, protoNum, srcIp, srcPort, destIp, destPort] = match;
+
+    // Mapping Protocole ID -> Nom
+    let protoName = "UNKNOWN";
+    if (protoNum === "6") protoName = "TCP";
+    else if (protoNum === "17") protoName = "UDP";
+    else if (protoNum === "1") protoName = "ICMP";
+    else protoName = `PROTO-${protoNum}`;
+
+    return {
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: new Date(timestamp).toLocaleTimeString(), // ou garder le format brut
+      srcIp,
+      srcPort: parseInt(srcPort),
+      destIp,
+      destPort: parseInt(destPort),
+      protocol: protoName,
+      action: actionStr === 'ALLOW' ? 'ALLOWED' : 'BLOCKED',
+    };
+  } catch (e) {
+    console.error("Erreur parsing log:", e);
+    return null;
+  }
+};
+
 const NetworkTrafficLog: React.FC = () => {
-  // Simulation des états de chargement (normalement via votre hook useNetworkTopology ou un nouveau hook useNetworkLogs)
   const [isLoading, setIsLoading] = useState(true);
   const [logs, setLogs] = useState<TrafficLog[]>([]);
-  const [error, setError] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  
+  // Ref pour stocker le stream et pouvoir l'annuler
+  const streamRef = useRef<grpcWeb.ClientReadableStream<any> | null>(null);
 
-  // Simulation du chargement des données
   useEffect(() => {
-    // Ici, vous remplaceriez ceci par votre appel API réel
-    const fetchLogs = () => {
-      setIsLoading(true);
-      setTimeout(() => {
-        setLogs([
-          { id: '1', timestamp: '2023-10-27 10:23:01', srcIp: '192.168.1.105', srcPort: 44321, destIp: '10.0.0.55', destPort: 443, protocol: 'TCP', action: 'ALLOWED' },
-          { id: '2', timestamp: '2023-10-27 10:23:05', srcIp: '192.168.1.200', srcPort: 55432, destIp: '172.16.0.4', destPort: 22, protocol: 'SSH', action: 'BLOCKED' },
-          { id: '3', timestamp: '2023-10-27 10:23:12', srcIp: '10.0.0.55', srcPort: 80, destIp: '192.168.1.105', destPort: 44321, protocol: 'HTTP', action: 'ALLOWED' },
-          { id: '4', timestamp: '2023-10-27 10:24:00', srcIp: '45.33.22.11', srcPort: 33001, destIp: '10.0.0.55', destPort: 3389, protocol: 'RDP', action: 'ALERT' },
-          { id: '5', timestamp: '2023-10-27 10:24:05', srcIp: '192.168.1.15', srcPort: 12345, destIp: '8.8.8.8', destPort: 53, protocol: 'UDP', action: 'ALLOWED' },
-          { id: '6', timestamp: '2023-10-27 10:24:10', srcIp: '192.168.1.105', srcPort: 44325, destIp: '10.0.0.55', destPort: 443, protocol: 'TCP', action: 'ALLOWED' },
-          { id: '7', timestamp: '2023-10-27 10:24:15', srcIp: '192.168.1.105', srcPort: 44328, destIp: '10.0.0.55', destPort: 443, protocol: 'TCP', action: 'ALLOWED' },
-        ]);
+    // URL de votre proxy Envoy ou directement le serveur Rust si tonic-web est activé
+    // Attention : sans tonic-web ou Envoy, cela échouera.
+    const enableGrpc = true; // Mettre à true quand vous avez les fichiers générés
+    
+    if (!enableGrpc) {
+        // Mock data pour l'instant si pas de backend
         setIsLoading(false);
-      }, 1000);
-    };
+        return; 
+    }
 
-    fetchLogs();
+    // --- INITIALISATION DU CLIENT gRPC ---
+    // const client = new FirewallServiceClient('http://localhost:50051', null, null);
+    // const request = new Empty();
+
+    setIsLoading(true);
+
+    try {
+        // Simulation de la connexion (À REMPLACER PAR LE VRAI CODE CI-DESSOUS)
+        /*
+        const stream = client.watchLogs(request, {});
+        streamRef.current = stream;
+
+        stream.on('data', (response: any) => {
+            setIsConnected(true);
+            setIsLoading(false);
+            
+            // response.getMessage() contient le texte brut envoyé par Rust
+            const rawMessage = response.getMessage(); 
+            const timestamp = response.getTimestamp(); // Assurez-vous que votre proto a ce champ
+
+            const newLog = parseLogMessage(rawMessage, timestamp);
+            if (newLog) {
+                setLogs((prevLogs) => [newLog, ...prevLogs].slice(0, 50)); // Garder les 50 derniers
+            }
+        });
+
+        stream.on('error', (err: any) => {
+            console.error('gRPC Stream Error:', err);
+            setIsConnected(false);
+        });
+
+        stream.on('end', () => {
+            setIsConnected(false);
+        });
+        */
+        
+        // --- CODE TEMPORAIRE POUR TESTER SANS BACKEND (A SUPPRIMER) ---
+        setTimeout(() => {
+            setIsLoading(false);
+            setIsConnected(true);
+            const interval = setInterval(() => {
+                const randomLog = parseLogMessage(
+                    `TRAFFIC ${Math.random() > 0.3 ? 'ALLOW' : 'DENY'} | Proto: ${Math.random() > 0.5 ? 6 : 17} | 192.168.1.${Math.floor(Math.random()*255)}:${Math.floor(Math.random()*60000)} -> 10.0.0.5:80`,
+                    new Date().toISOString()
+                );
+                if(randomLog) setLogs(prev => [randomLog, ...prev].slice(0, 20));
+            }, 2000);
+            return () => clearInterval(interval);
+        }, 1000);
+        // -------------------------------------------------------------
+
+    } catch (err) {
+        console.error("Connection failed", err);
+        setIsLoading(false);
+    }
+
+    // Cleanup function
+    return () => {
+        if (streamRef.current) {
+            streamRef.current.cancel();
+        }
+    };
   }, []);
 
-  const handleRefresh = () => {
-    setIsLoading(true);
-    // Re-fetch logic here
-    setTimeout(() => setIsLoading(false), 500);
+  const handleClearLogs = () => {
+    setLogs([]);
   };
 
   const getStatusColor = (action: string) => {
@@ -58,59 +151,13 @@ const NetworkTrafficLog: React.FC = () => {
     }
   };
 
-  // État de chargement (Squelette de tableau)
-  if (isLoading) {
-    return (
-      <Card className="bg-[#11131a] border-[#1a1d25]">
-        <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-[#1a1d25]">
-          <CardTitle className="text-white">Network Traffic Log</CardTitle>
-          <div className="flex space-x-2">
-             <Button variant="outline" size="sm" className="h-7 bg-[#1a1d25] border-[#2a2e3b]" disabled>
-              <i className="ri-download-line"></i>
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 bg-[#1a1d25] border-[#2a2e3b]" disabled>
-              <i className="ri-refresh-line"></i>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="space-y-2 p-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center justify-between h-8 bg-[#1a1d25] rounded animate-pulse"></div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // État d'erreur
-  if (error) {
-    return (
-      <Card className="bg-[#11131a] border-[#1a1d25]">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-white">Network Traffic Log</CardTitle>
-          <Button variant="outline" size="sm" onClick={handleRefresh}>
-            <i className="ri-refresh-line"></i>
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64 flex items-center justify-center text-red-400">
-            Unable to load traffic logs.
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Affichage principal (Tableau des logs)
   return (
     <Card className="bg-[#11131a] border-[#1a1d25] w-full">
       <CardHeader className="flex flex-row items-center justify-between py-3 px-4 border-b border-[#1a1d25]">
         <div className="flex items-center gap-2">
             <CardTitle className="text-white text-sm font-medium">Network Traffic Log</CardTitle>
-            <span className="text-xs text-gray-500 bg-[#1a1d25] px-2 py-0.5 rounded-full border border-[#2a2e3b]">
-                Live
+            <span className={`text-xs px-2 py-0.5 rounded-full border border-[#2a2e3b] transition-colors ${isConnected ? 'text-green-400 bg-green-900/20' : 'text-gray-500 bg-[#1a1d25]'}`}>
+                {isConnected ? '● Live gRPC' : '○ Connecting...'}
             </span>
         </div>
         <div className="flex space-x-2">
@@ -118,87 +165,76 @@ const NetworkTrafficLog: React.FC = () => {
             variant="outline"
             size="sm"
             className="bg-[#1a1d25] hover:bg-[#222631] h-7 border-[#2a2e3b] text-gray-400 hover:text-white"
-            onClick={() => alert("Filter functionality")}
+            onClick={handleClearLogs}
           >
-            <i className="ri-filter-3-line mr-1"></i> Filter
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="bg-[#1a1d25] hover:bg-[#222631] h-7 border-[#2a2e3b] text-gray-400 hover:text-white"
-            onClick={handleRefresh}
-          >
-            <i className="ri-refresh-line"></i>
+            <i className="ri-delete-bin-line mr-1"></i> Clear
           </Button>
         </div>
       </CardHeader>
       
       <CardContent className="p-0">
-        <div className="relative overflow-x-auto">
+        <div className="relative overflow-x-auto max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
             <table className="w-full text-left text-xs">
-                <thead className="text-gray-400 bg-[#15171f] uppercase font-medium border-b border-[#1a1d25]">
+                <thead className="text-gray-400 bg-[#15171f] uppercase font-medium border-b border-[#1a1d25] sticky top-0 z-10">
                     <tr>
                         <th scope="col" className="px-4 py-3">Timestamp</th>
                         <th scope="col" className="px-4 py-3">Source</th>
-                        <th scope="col" className="px-4 py-3"></th> {/* Flèche */}
+                        <th scope="col" className="px-4 py-3"></th>
                         <th scope="col" className="px-4 py-3">Destination</th>
                         <th scope="col" className="px-4 py-3">Protocol</th>
                         <th scope="col" className="px-4 py-3 text-right">Status</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1a1d25]">
-                    {logs.map((log) => (
-                        <tr key={log.id} className="hover:bg-[#1a1d25] transition-colors group">
-                            <td className="px-4 py-3 text-gray-500 font-mono whitespace-nowrap">
-                                {log.timestamp}
-                            </td>
-                            
-                            {/* Source */}
-                            <td className="px-4 py-3 text-gray-300 font-mono">
-                                <div className="flex flex-col">
-                                    <span className="text-blue-400">{log.srcIp}</span>
-                                    <span className="text-[10px] text-gray-500">Port: {log.srcPort}</span>
-                                </div>
-                            </td>
-
-                            {/* Direction Icon */}
-                            <td className="px-1 py-3 text-gray-600">
-                                <i className="ri-arrow-right-line"></i>
-                            </td>
-
-                            {/* Destination */}
-                            <td className="px-4 py-3 text-gray-300 font-mono">
-                                <div className="flex flex-col">
-                                    <span className="text-orange-400">{log.destIp}</span>
-                                    <span className="text-[10px] text-gray-500">Port: {log.destPort}</span>
-                                </div>
-                            </td>
-
-                            {/* Protocol */}
-                            <td className="px-4 py-3">
-                                <span className="bg-[#1f232e] text-gray-300 px-2 py-1 rounded text-[10px] border border-[#2a2e3b] font-mono">
-                                    {log.protocol}
-                                </span>
-                            </td>
-
-                            {/* Action / Status */}
-                            <td className="px-4 py-3 text-right">
-                                <span className={`text-[10px] px-2 py-1 rounded border font-medium ${getStatusColor(log.action)}`}>
-                                    {log.action}
-                                </span>
+                    {logs.length === 0 && !isLoading ? (
+                        <tr>
+                            <td colSpan={6} className="text-center py-8 text-gray-600">
+                                Waiting for traffic events...
                             </td>
                         </tr>
-                    ))}
+                    ) : (
+                        logs.map((log) => (
+                            <tr key={log.id} className="hover:bg-[#1a1d25] transition-colors group animate-in fade-in slide-in-from-top-1 duration-300">
+                                <td className="px-4 py-3 text-gray-500 font-mono whitespace-nowrap">
+                                    {log.timestamp}
+                                </td>
+                                <td className="px-4 py-3 text-gray-300 font-mono">
+                                    <div className="flex flex-col">
+                                        <span className="text-blue-400">{log.srcIp}</span>
+                                        <span className="text-[10px] text-gray-500">:{log.srcPort}</span>
+                                    </div>
+                                </td>
+                                <td className="px-1 py-3 text-gray-600">
+                                    <i className="ri-arrow-right-line"></i>
+                                </td>
+                                <td className="px-4 py-3 text-gray-300 font-mono">
+                                    <div className="flex flex-col">
+                                        <span className="text-orange-400">{log.destIp}</span>
+                                        <span className="text-[10px] text-gray-500">:{log.destPort}</span>
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                    <Badge variant="outline" className="bg-[#1f232e] text-gray-300 border-[#2a2e3b] font-mono font-normal">
+                                        {log.protocol}
+                                    </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                    <Badge variant="outline" className={`font-normal ${getStatusColor(log.action)}`}>
+                                        {log.action}
+                                    </Badge>
+                                </td>
+                            </tr>
+                        ))
+                    )}
                 </tbody>
             </table>
         </div>
         
-        {/* Footer style "Terminal" */}
         <div className="bg-[#0f1116] px-4 py-2 border-t border-[#1a1d25] flex justify-between items-center text-[10px] text-gray-500">
-            <span>Showing {logs.length} latest events</span>
+            <span>Buffer: {logs.length} events</span>
             <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                Logging active
+                {isConnected && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>}
+                {isConnected ? 'Receiving data' : 'Disconnected'}
             </span>
         </div>
       </CardContent>
