@@ -3,12 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-// --- IMPORTS DES FICHIERS GÉNÉRÉS (A adapter selon votre structure) ---
-// import { FirewallServiceClient } from '../generated/firewall_grpc_web_pb';
-// import { Empty } from 'google-protobuf/google/protobuf/empty_pb';
-// Si vous n'avez pas encore généré les fichiers, commentez les imports ci-dessus 
-// et lisez la note en bas du code.
-
 interface TrafficLog {
   id: string;
   timestamp: string;
@@ -21,15 +15,26 @@ interface TrafficLog {
 }
 
 // Fonction utilitaire pour parser le message brut venant du Rust
-// Format attendu : "TRAFFIC ALLOW | Proto: 6 | 192.168.1.1:1234 -> 10.0.0.1:80"
-const parseLogMessage = (rawMsg: string, timestamp: string): TrafficLog | null => {
+// Format : "[SystemTime { tv_sec: 1770569501, ... }] [WARN] TRAFFIC DENY | Proto: 6 | ..."
+const parseLogMessage = (rawMsg: string, _serverTimestamp: string): TrafficLog | null => {
   try {
-    const regex = /TRAFFIC (ALLOW|DENY) \| Proto: (\d+) \| ([\d\.]+):(\d+) -> ([\d\.]+):(\d+)/;
+    // 1. Nouvelle Regex pour capturer 'tv_sec' et le reste du message
+    // On cherche "tv_sec: (chiffres)", puis plus loin "TRAFFIC (ACTION)..."
+    const regex = /tv_sec:\s*(\d+).*?TRAFFIC (ALLOW|DENY) \| Proto: (\d+) \| ([\d\.]+):(\d+) -> ([\d\.]+):(\d+)/;
+    
     const match = rawMsg.match(regex);
 
-    if (!match) return null;
+    if (!match) {
+        console.warn("Log format mismatch:", rawMsg);
+        return null;
+    }
 
-    const [_, actionStr, protoNum, srcIp, srcPort, destIp, destPort] = match;
+    const [_, tvSecStr, actionStr, protoNum, srcIp, srcPort, destIp, destPort] = match;
+
+    // 2. Conversion du timestamp Rust (secondes) en JS (millisecondes)
+    const seconds = parseInt(tvSecStr, 10);
+    const dateObj = new Date(seconds * 1000); 
+    const formattedTime = dateObj.toLocaleTimeString(); // Affiche l'heure locale (ex: 14:30:05)
 
     // Mapping Protocole ID -> Nom
     let protoName = "UNKNOWN";
@@ -40,7 +45,7 @@ const parseLogMessage = (rawMsg: string, timestamp: string): TrafficLog | null =
 
     return {
       id: Math.random().toString(36).substr(2, 9),
-      timestamp: new Date(timestamp).toLocaleTimeString(), // ou garder le format brut
+      timestamp: formattedTime, 
       srcIp,
       srcPort: parseInt(srcPort),
       destIp,
@@ -62,7 +67,6 @@ const NetworkTrafficLog: React.FC = () => {
   useEffect(() => {
     setIsLoading(true);
 
-    // Connexion au WebSocket du serveur Node.js (qui lui, parle au Rust)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     const ws = new WebSocket(wsUrl);
@@ -71,7 +75,6 @@ const NetworkTrafficLog: React.FC = () => {
       console.log("Connected to Log Stream via WS");
       setIsConnected(true);
       setIsLoading(false);
-      // On demande au serveur de nous envoyer les logs
       ws.send(JSON.stringify({ type: 'subscribe_logs' }));
     };
 
@@ -79,9 +82,8 @@ const NetworkTrafficLog: React.FC = () => {
       try {
         const data = JSON.parse(event.data);
         
-        // On filtre uniquement les messages de type 'log'
         if (data.type === 'log_entry') {
-           // data.payload contient { message, timestamp, level } venant du proto
+           // data.payload.message contient la longue chaine avec SystemTime
            const newLog = parseLogMessage(data.payload.message, data.payload.timestamp);
            
            if (newLog) {
