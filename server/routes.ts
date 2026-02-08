@@ -540,7 +540,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     },
   ];
+  const startLogStream = () => {
+    console.log("Démarrage du stream de logs gRPC...");
+    try {
+        // Tu dois ajouter cette méthode dans ta classe FirewallClient (voir étape 3)
+        // Elle retourne l'objet stream gRPC natif
+        const stream = firewallClient.getLogStream(); 
 
+        stream.on('data', (logEntry: any) => {
+            // logEntry correspond au message LogEntry du proto
+            // Structure attendue: { message: "...", level: "...", timestamp: "..." }
+            
+            const wsMessage = JSON.stringify({
+                type: 'log_entry',
+                payload: {
+                    message: logEntry.message,
+                    level: logEntry.level,
+                    timestamp: logEntry.timestamp
+                }
+            });
+
+            // Diffuser à tous les clients connectés
+            wss.clients.forEach((client) => {
+                if (client.readyState === 1) { // 1 = OPEN
+                    client.send(wsMessage);
+                }
+            });
+        });
+
+        stream.on('error', (err: any) => {
+            console.error("Erreur stream gRPC:", err);
+            // Tentative de reconnexion après 5 secondes en cas de crash du Rust
+            setTimeout(startLogStream, 5000);
+        });
+        
+        stream.on('end', () => {
+            console.log("Fin du stream gRPC, reconnexion...");
+            setTimeout(startLogStream, 5000);
+        });
+
+    } catch (e) {
+        console.error("Impossible de lancer le stream:", e);
+    }
+  };
   // Enregistrer routes protégées
   protectedRoutes.forEach(route => {
     const { method, path, handler } = route;

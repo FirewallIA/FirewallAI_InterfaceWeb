@@ -87,5 +87,10 @@ export class FirewallClient {
       });
     });
   }
+  public getLogStream() {
+        // Appelle la méthode WatchLogs définie dans ton proto
+        // On passe un Empty message (ou objet vide selon la lib utilisée)
+        return this.client.watchLogs({});
+    }
 
 }

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import * as grpcWeb from 'grpc-web';
 
 // --- IMPORTS DES FICHIERS GÉNÉRÉS (A adapter selon votre structure) ---
 // import { FirewallServiceClient } from '../generated/firewall_grpc_web_pb';
@@ -60,81 +59,46 @@ const NetworkTrafficLog: React.FC = () => {
   const [logs, setLogs] = useState<TrafficLog[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   
-  // Ref pour stocker le stream et pouvoir l'annuler
-  const streamRef = useRef<grpcWeb.ClientReadableStream<any> | null>(null);
-
   useEffect(() => {
-    // URL de votre proxy Envoy ou directement le serveur Rust si tonic-web est activé
-    // Attention : sans tonic-web ou Envoy, cela échouera.
-    const enableGrpc = true; // Mettre à true quand vous avez les fichiers générés
-    
-    if (!enableGrpc) {
-        // Mock data pour l'instant si pas de backend
-        setIsLoading(false);
-        return; 
-    }
-
-    // --- INITIALISATION DU CLIENT gRPC ---
-    // const client = new FirewallServiceClient('http://localhost:50051', null, null);
-    // const request = new Empty();
-
     setIsLoading(true);
 
-    try {
-        // Simulation de la connexion (À REMPLACER PAR LE VRAI CODE CI-DESSOUS)
-        /*
-        const stream = client.watchLogs(request, {});
-        streamRef.current = stream;
+    // Connexion au WebSocket du serveur Node.js (qui lui, parle au Rust)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const ws = new WebSocket(wsUrl);
 
-        stream.on('data', (response: any) => {
-            setIsConnected(true);
-            setIsLoading(false);
-            
-            // response.getMessage() contient le texte brut envoyé par Rust
-            const rawMessage = response.getMessage(); 
-            const timestamp = response.getTimestamp(); // Assurez-vous que votre proto a ce champ
+    ws.onopen = () => {
+      console.log("Connected to Log Stream via WS");
+      setIsConnected(true);
+      setIsLoading(false);
+      // On demande au serveur de nous envoyer les logs
+      ws.send(JSON.stringify({ type: 'subscribe_logs' }));
+    };
 
-            const newLog = parseLogMessage(rawMessage, timestamp);
-            if (newLog) {
-                setLogs((prevLogs) => [newLog, ...prevLogs].slice(0, 50)); // Garder les 50 derniers
-            }
-        });
-
-        stream.on('error', (err: any) => {
-            console.error('gRPC Stream Error:', err);
-            setIsConnected(false);
-        });
-
-        stream.on('end', () => {
-            setIsConnected(false);
-        });
-        */
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
         
-        // --- CODE TEMPORAIRE POUR TESTER SANS BACKEND (A SUPPRIMER) ---
-        setTimeout(() => {
-            setIsLoading(false);
-            setIsConnected(true);
-            const interval = setInterval(() => {
-                const randomLog = parseLogMessage(
-                    `TRAFFIC ${Math.random() > 0.3 ? 'ALLOW' : 'DENY'} | Proto: ${Math.random() > 0.5 ? 6 : 17} | 192.168.1.${Math.floor(Math.random()*255)}:${Math.floor(Math.random()*60000)} -> 10.0.0.5:80`,
-                    new Date().toISOString()
-                );
-                if(randomLog) setLogs(prev => [randomLog, ...prev].slice(0, 20));
-            }, 2000);
-            return () => clearInterval(interval);
-        }, 1000);
-        // -------------------------------------------------------------
-
-    } catch (err) {
-        console.error("Connection failed", err);
-        setIsLoading(false);
-    }
-
-    // Cleanup function
-    return () => {
-        if (streamRef.current) {
-            streamRef.current.cancel();
+        // On filtre uniquement les messages de type 'log'
+        if (data.type === 'log_entry') {
+           // data.payload contient { message, timestamp, level } venant du proto
+           const newLog = parseLogMessage(data.payload.message, data.payload.timestamp);
+           
+           if (newLog) {
+             setLogs((prevLogs) => [newLog, ...prevLogs].slice(0, 50));
+           }
         }
+      } catch (err) {
+        console.error("Error parsing WS message", err);
+      }
+    };
+
+    ws.onclose = () => {
+      setIsConnected(false);
+    };
+
+    return () => {
+      ws.close();
     };
   }, []);
 
