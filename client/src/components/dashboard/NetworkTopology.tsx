@@ -18,25 +18,37 @@ interface TrafficLog {
 // Format : "[SystemTime { tv_sec: 1770569501, ... }] [WARN] TRAFFIC DENY | Proto: 6 | ..."
 const parseLogMessage = (rawMsg: string, _serverTimestamp: string): TrafficLog | null => {
   try {
-    // 1. Nouvelle Regex pour capturer 'tv_sec' et le reste du message
-    // On cherche "tv_sec: (chiffres)", puis plus loin "TRAFFIC (ACTION)..."
-    const regex = /tv_sec:\s*(\d+).*?TRAFFIC (ALLOW|DENY) \| Proto: (\d+) \| ([\d\.]+):(\d+) -> ([\d\.]+):(\d+)/;
-    
-    const match = rawMsg.match(regex);
+    // DEBUG : Décommentez la ligne ci-dessous pour voir ce qui arrive dans la console du navigateur (F12)
+    // console.log("Reçu:", rawMsg);
 
-    if (!match) {
-        console.warn("Log format mismatch:", rawMsg);
-        return null;
+    // 1. Extraction des données TRAFFIC (C'est le plus important)
+    // On cherche : TRAFFIC <ACTION> | Proto: <ID> | <IP>:<PORT> -> <IP>:<PORT>
+    // Le \s* permet d'accepter un nombre variable d'espaces
+    const trafficRegex = /TRAFFIC (ALLOW|DENY)\s*\|\s*Proto:\s*(\d+)\s*\|\s*([\d\.]+):(\d+)\s*->\s*([\d\.]+):(\d+)/;
+    const match = rawMsg.match(trafficRegex);
+
+    // Si on ne trouve pas le pattern "TRAFFIC ...", ce n'est pas un log réseau, on ignore.
+    if (!match) return null;
+
+    const [_, actionStr, protoNum, srcIp, srcPort, destIp, destPort] = match;
+
+    // 2. Tentative d'extraction du Timestamp Rust (tv_sec)
+    // On cherche "tv_sec: <chiffres>" n'importe où dans la chaîne
+    let finalTimestamp = new Date().toLocaleTimeString(); // Valeur par défaut : maintenant
+    
+    const timeRegex = /tv_sec:\s*(\d+)/;
+    const timeMatch = rawMsg.match(timeRegex);
+
+    if (timeMatch) {
+        // Si on trouve le timestamp Rust, on l'utilise
+        const seconds = parseInt(timeMatch[1], 10);
+        // Attention : Rust SystemTime peut parfois être futuriste ou buggé, on protège la conversion
+        if (!isNaN(seconds) && seconds > 0) {
+            finalTimestamp = new Date(seconds * 1000).toLocaleTimeString();
+        }
     }
 
-    const [_, tvSecStr, actionStr, protoNum, srcIp, srcPort, destIp, destPort] = match;
-
-    // 2. Conversion du timestamp Rust (secondes) en JS (millisecondes)
-    const seconds = parseInt(tvSecStr, 10);
-    const dateObj = new Date(seconds * 1000); 
-    const formattedTime = dateObj.toLocaleTimeString(); // Affiche l'heure locale (ex: 14:30:05)
-
-    // Mapping Protocole ID -> Nom
+    // 3. Mapping du Protocole
     let protoName = "UNKNOWN";
     if (protoNum === "6") protoName = "TCP";
     else if (protoNum === "17") protoName = "UDP";
@@ -45,7 +57,7 @@ const parseLogMessage = (rawMsg: string, _serverTimestamp: string): TrafficLog |
 
     return {
       id: Math.random().toString(36).substr(2, 9),
-      timestamp: formattedTime, 
+      timestamp: finalTimestamp,
       srcIp,
       srcPort: parseInt(srcPort),
       destIp,
