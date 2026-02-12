@@ -304,61 +304,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('[WS] Client dashboard connecté');
     ws.send(JSON.stringify({ type: 'connection', status: 'connected' }));
     
-    ws.on('message', (msg) => {
-       // Logique optionnelle de réception de messages du frontend
-    });
-    
-    ws.on('close', () => {
-      console.log('[WS] Client déconnecté');
-    });
-  });
+    // --- MODIFICATION ICI : Un stream gRPC par client ---
+    // On demande au serveur Rust les logs (Historique + Live) pour CE client
+    const grpcStream = firewallClient.getLogStream();
 
-  // 3. Fonction pour écouter gRPC et envoyer vers WebSocket
-  const startLogStream = () => {
-    console.log("[gRPC] Initialisation du stream de logs...");
-    try {
-        const stream = firewallClient.getLogStream(); 
-
-        stream.on('data', (logEntry: any) => {
-            // DEBUG: voir si les données arrivent
-            console.log(`[gRPC] Donnée reçue: ${logEntry.message}`); 
-
-            const wsMessage = JSON.stringify({
+    grpcStream.on('data', (logEntry: any) => {
+        // Vérification de sécurité pour ne pas crasher si le WS est fermé
+        if (ws.readyState === ws.OPEN) {
+             ws.send(JSON.stringify({
                 type: 'log_entry',
                 payload: {
                     message: logEntry.message,
                     level: logEntry.level,
                     timestamp: logEntry.timestamp
                 }
-            });
+            }));
+        }
+    });
 
-            // Diffusion à tous les clients connectés
-            wss.clients.forEach((client) => {
-                if (client.readyState === 1) { // 1 = OPEN
-                    client.send(wsMessage);
-                }
-            });
-        });
+    grpcStream.on('error', (err: any) => {
+        // Les erreurs "Cancelled" sont normales quand on ferme la page
+        if (!err.message.includes('Cancelled')) {
+            console.error("[gRPC] Erreur de stream client:", err.message);
+        }
+        ws.close();
+    });
 
-        stream.on('error', (err: any) => {
-            console.error("[gRPC] Erreur de stream:", err.message);
-            // Reconnexion après 5 secondes
-            setTimeout(startLogStream, 5000);
-        });
-        
-        stream.on('end', () => {
-            console.log("[gRPC] Stream terminé par le serveur. Reconnexion...");
-            setTimeout(startLogStream, 5000);
-        });
+    grpcStream.on('end', () => {
+        console.log("[gRPC] Stream terminé par le serveur.");
+        ws.close();
+    });
 
-    } catch (e) {
-        console.error("[gRPC] Echec connexion initiale:", e);
-        setTimeout(startLogStream, 5000);
-    }
-  };
+    // 3. IMPORTANT : Nettoyage
+    // Quand le navigateur se ferme ou change de page
+    ws.on('close', () => {
+      console.log('[WS] Client déconnecté - Arrêt du flux gRPC associé');
+      // On coupe le tuyau gRPC pour ne pas que le serveur Rust continue d'envoyer pour rien
+      if (grpcStream) {
+          grpcStream.cancel(); 
+      }
+    });
+  });
 
-  // 4. IMPORTANT: Lancer l'écoute du stream
-  startLogStream();
+  // SUPPRIMEZ TOUTE LA FONCTION startLogStream() GLOBALE QUI ÉTAIT ICI
+  // ET L'APPEL startLogStream();
 
   return httpServer;
 }
