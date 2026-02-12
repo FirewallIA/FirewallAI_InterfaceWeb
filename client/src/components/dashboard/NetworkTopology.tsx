@@ -24,7 +24,7 @@ const parseLogMessage = (rawMsg: string, _serverTimestamp: string): TrafficLog |
     // 1. Extraction des données TRAFFIC (C'est le plus important)
     // On cherche : TRAFFIC <ACTION> | Proto: <ID> | <IP>:<PORT> -> <IP>:<PORT>
     // Le \s* permet d'accepter un nombre variable d'espaces
-    const trafficRegex = /TRAFFIC (ALLOW|DENY)\s*\|\s*Proto:\s*(\d+)\s*\|\s*([\d\.]+):(\d+)\s*->\s*([\d\.]+):(\d+)/;
+    const trafficRegex = /TRAFFIC (ALLOW|DENY)\s*\|\s*Proto:\s*([a-zA-Z0-9]+)\s*\|\s*([\d\.]+):(\d+)\s*->\s*([\d\.]+):(\d+)/;
     const match = rawMsg.match(trafficRegex);
 
     // Si on ne trouve pas le pattern "TRAFFIC ...", ce n'est pas un log réseau, on ignore.
@@ -66,7 +66,7 @@ const parseLogMessage = (rawMsg: string, _serverTimestamp: string): TrafficLog |
       action: actionStr === 'ALLOW' ? 'ALLOWED' : 'BLOCKED',
     };
   } catch (e) {
-    console.error("Erreur parsing log:", e);
+    console.error("Erreur parsing log:", e);  
     return null;
   }
 };
