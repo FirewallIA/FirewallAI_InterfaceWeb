@@ -18,42 +18,40 @@ interface TrafficLog {
 // Format : "[SystemTime { tv_sec: 1770569501, ... }] [WARN] TRAFFIC DENY | Proto: 6 | ..."
 const parseLogMessage = (rawMsg: string, _serverTimestamp: string): TrafficLog | null => {
   try {
-    // DEBUG : Décommentez la ligne ci-dessous pour voir ce qui arrive dans la console du navigateur (F12)
-    // console.log("Reçu:", rawMsg);
-
-    // 1. Extraction des données TRAFFIC (C'est le plus important)
-    // On cherche : TRAFFIC <ACTION> | Proto: <ID> | <IP>:<PORT> -> <IP>:<PORT>
-    // Le \s* permet d'accepter un nombre variable d'espaces
+    // 1. MODIFICATION DE LA REGEX
+    // On remplace (\d+) par ([a-zA-Z0-9]+) pour accepter "6", "TCP", "ICMP", etc.
     const trafficRegex = /TRAFFIC (ALLOW|DENY)\s*\|\s*Proto:\s*([a-zA-Z0-9]+)\s*\|\s*([\d\.]+):(\d+)\s*->\s*([\d\.]+):(\d+)/;
+    
     const match = rawMsg.match(trafficRegex);
 
-    // Si on ne trouve pas le pattern "TRAFFIC ...", ce n'est pas un log réseau, on ignore.
+    // Si pas de match, on arrête tout de suite
     if (!match) return null;
 
-    const [_, actionStr, protoNum, srcIp, srcPort, destIp, destPort] = match;
+    const [_, actionStr, protoRaw, srcIp, srcPort, destIp, destPort] = match;
 
-    // 2. Tentative d'extraction du Timestamp Rust (tv_sec)
-    // On cherche "tv_sec: <chiffres>" n'importe où dans la chaîne
-    let finalTimestamp = new Date().toLocaleTimeString(); // Valeur par défaut : maintenant
-    
+    // ... extraction du timestamp (inchangé) ...
+    let finalTimestamp = new Date().toLocaleTimeString();
     const timeRegex = /tv_sec:\s*(\d+)/;
     const timeMatch = rawMsg.match(timeRegex);
-
     if (timeMatch) {
-        // Si on trouve le timestamp Rust, on l'utilise
         const seconds = parseInt(timeMatch[1], 10);
-        // Attention : Rust SystemTime peut parfois être futuriste ou buggé, on protège la conversion
         if (!isNaN(seconds) && seconds > 0) {
             finalTimestamp = new Date(seconds * 1000).toLocaleTimeString();
         }
     }
 
-    // 3. Mapping du Protocole
-    let protoName = "UNKNOWN";
-    if (protoNum === "6") protoName = "TCP";
-    else if (protoNum === "17") protoName = "UDP";
-    else if (protoNum === "1") protoName = "ICMP";
-    else protoName = `PROTO-${protoNum}`;
+    // 2. MODIFICATION DE LA LOGIQUE PROTOCOLE
+    // Le serveur peut envoyer "6" (Live) ou "TCP" (DB). Il faut gérer les deux.
+    let protoName = protoRaw; // Par défaut, on prend ce qu'on a reçu (ex: "ICMP")
+
+    // Si c'est un chiffre (ex: "6"), on le convertit en nom
+    if (!isNaN(Number(protoRaw))) {
+        if (protoRaw === "6") protoName = "TCP";
+        else if (protoRaw === "17") protoName = "UDP";
+        else if (protoRaw === "1") protoName = "ICMP";
+        else protoName = `PROTO-${protoRaw}`;
+    } 
+    // Sinon, c'est déjà du texte (ex: "ICMP" venant de la DB), on le garde tel quel.
 
     return {
       id: Math.random().toString(36).substr(2, 9),
@@ -62,7 +60,7 @@ const parseLogMessage = (rawMsg: string, _serverTimestamp: string): TrafficLog |
       srcPort: parseInt(srcPort),
       destIp,
       destPort: parseInt(destPort),
-      protocol: protoName,
+      protocol: protoName, // On utilise notre variable nettoyée
       action: actionStr === 'ALLOW' ? 'ALLOWED' : 'BLOCKED',
     };
   } catch (e) {
