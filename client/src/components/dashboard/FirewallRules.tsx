@@ -1,73 +1,143 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Assure-toi d'avoir ces composants ou utilise des <select> natifs
 import { useFirewallRules } from '@/lib/data';
 import { FirewallRule } from '@/lib/types';
 
+// État initial d'une nouvelle règle
+const initialRuleState = {
+  name: '',
+  source_ip: 'any',
+  dest_ip: 'any',
+  source_port: '*',
+  dest_port: '*',
+  protocol: 'TCP',
+  action: 'deny'
+};
+
 const FirewallRules: React.FC = () => {
-  const { data, isLoading, error } = useFirewallRules();
+  const { data, isLoading, error, refetch } = useFirewallRules();
+  
+  // États
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // États pour le formulaire d'ajout
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newRule, setNewRule] = useState(initialRuleState);
 
-  const handleAddRule = () => {
-    // Implementation would go here
-    alert('Add rule functionality would be implemented here');
+  // --- REFRESH ---
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try { await refetch(); } 
+    catch (err) { console.error(err); } 
+    finally { setTimeout(() => setIsRefreshing(false), 500); }
   };
 
-  const handleEditRule = (id: string) => {
-    // Implementation would go here
-    alert(`Edit rule ${id}`);
+  // --- DELETE ---
+  const handleDeleteRule = async (id: string) => {
+    try {
+      setIsDeleting(id);
+      const response = await fetch(`/api/firewall/rules/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) throw new Error("Erreur suppression");
+      await refetch();
+    } catch (err: any) {
+      console.error(err);
+      alert("Erreur: Impossible de supprimer la règle");
+    } finally {
+      setIsDeleting(null);
+    }
   };
 
-  const handleDeleteRule = (id: string) => {
-    // Implementation would go here
-    alert(`Delete rule ${id}`);
+  // --- CREATE (Nouvelle fonction) ---
+  const handleCreateRule = async () => {
+    // Validation basique
+    if (!newRule.name.trim()) {
+      alert("Le nom de la règle est obligatoire");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      const response = await fetch('/api/firewall/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRule)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Erreur lors de la création");
+      }
+
+      // Succès : On ferme, on reset et on refresh
+      setIsAddModalOpen(false);
+      setNewRule(initialRuleState);
+      await refetch();
+
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erreur création: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<any>(null); // Stocke la règle en cours de modif
+  const [isUpdating, setIsUpdating] = useState(false);
+  const handleEditRule = (rule: FirewallRule) => {
+  setEditingRule({
+    id: rule.id,
+    name: rule.name,
+    source_ip: rule.source,
+    dest_ip: rule.destination,
+    source_port: rule.source_port || '*',
+    dest_port: rule.port,
+    protocol: rule.protocol,
+    action: rule.action.toLowerCase()
+  });
+  setIsEditModalOpen(true);
+  };
+  
+  const handleUpdateRule = async () => {
+    if (!editingRule.name.trim()) return alert("Nom obligatoire");
+
+    try {
+      setIsUpdating(true);
+      const response = await fetch(`/api/firewall/rules/${editingRule.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingRule)
+      });
+
+      if (!response.ok) throw new Error("Erreur lors de la modification");
+
+      setIsEditModalOpen(false);
+      await refetch();
+    } catch (err: any) {
+      alert(`Erreur: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
-  if (isLoading) {
-    return (
-      <Card className="bg-[#11131a] border-[#1a1d25]">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-white">Firewall Rules</CardTitle>
-          <Button
-            className="bg-primary-600 hover:bg-primary-500 text-white text-xs h-8"
-            disabled
-          >
-            <i className="ri-add-line mr-1"></i> Add Rule
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-700 rounded mb-3"></div>
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-12 bg-gray-800 rounded"></div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  // --- UI HELPERS ---
+  const updateField = (field: string, value: string) => {
+    setNewRule(prev => ({ ...prev, [field]: value }));
+  };
 
-  if (error) {
-    return (
-      <Card className="bg-[#11131a] border-[#1a1d25]">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-white">Firewall Rules</CardTitle>
-          <Button
-            className="bg-primary-600 hover:bg-primary-500 text-white text-xs h-8"
-            onClick={handleAddRule}
-          >
-            <i className="ri-add-line mr-1"></i> Add Rule
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-red-400">
-            Error loading firewall rules
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  // --- RENDER LOADING / ERROR ---
+  if (isLoading) return <LoadingView />;
+  if (error) return <ErrorView onRefresh={handleRefresh} onAdd={() => setIsAddModalOpen(true)} />;
 
   const rules: FirewallRule[] = data?.rules || [];
 
@@ -75,21 +145,223 @@ const FirewallRules: React.FC = () => {
     <Card className="bg-[#11131a] border-[#1a1d25]">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-white">Firewall Rules</CardTitle>
-        <Button
-          className="bg-primary-600 hover:bg-primary-500 text-white text-xs h-8"
-          onClick={handleAddRule}
-        >
-          <i className="ri-add-line mr-1"></i> Add Rule
-        </Button>
+        <div className="flex space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-[#1a1d25] hover:bg-[#222631] h-7 text-gray-400 hover:text-white border-[#2a2e3b]"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <i className={`ri-refresh-line ${isRefreshing ? 'animate-spin' : ''}`}></i>
+          </Button>
+
+          {/* BOUTON ADD + MODAL */}
+          <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary-600 hover:bg-primary-500 text-white text-xs h-7">
+                <i className="ri-add-line mr-1"></i> Add Rule
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-[#1a1d25] border-[#2a2e3b] text-white">
+              <DialogHeader>
+                <DialogTitle>Add Firewall Rule</DialogTitle>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                {/* Name */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right text-gray-400">Name</Label>
+                  <Input 
+                    id="name" 
+                    value={newRule.name} 
+                    onChange={(e) => updateField('name', e.target.value)} 
+                    className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+                    placeholder="My Rule"
+                  />
+                </div>
+
+                {/* Action & Protocol */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right text-gray-400">Action</Label>
+                  <div className="col-span-3 flex gap-4">
+                    <select 
+                      className="flex h-9 w-full rounded-md border border-[#2a2e3b] bg-[#11131a] px-3 py-1 text-sm shadow-sm transition-colors text-white"
+                      value={newRule.action}
+                      onChange={(e) => updateField('action', e.target.value)}
+                    >
+                      <option value="allow">Allow</option>
+                      <option value="deny">Deny</option>
+                    </select>
+                    
+                    <select 
+                      className="flex h-9 w-full rounded-md border border-[#2a2e3b] bg-[#11131a] px-3 py-1 text-sm shadow-sm transition-colors text-white"
+                      value={newRule.protocol}
+                      onChange={(e) => updateField('protocol', e.target.value)}
+                    >
+                      <option value="TCP">TCP</option>
+                      <option value="UDP">UDP</option>
+                      <option value="ICMP">ICMP</option>
+                      <option value="any">Any</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Source IP */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="sip" className="text-right text-gray-400">Source IP</Label>
+                  <Input 
+                    id="sip" 
+                    value={newRule.source_ip} 
+                    onChange={(e) => updateField('source_ip', e.target.value)}
+                    className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+                  />
+                </div>
+
+                {/* Dest IP */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="dip" className="text-right text-gray-400">Dest IP</Label>
+                  <Input 
+                    id="dip" 
+                    value={newRule.dest_ip} 
+                    onChange={(e) => updateField('dest_ip', e.target.value)}
+                    className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+                  />
+                </div>
+
+                {/* Ports */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="dport" className="text-right text-gray-400">Dest Port</Label>
+                  <Input 
+                    id="dport" 
+                    value={newRule.dest_port} 
+                    onChange={(e) => updateField('dest_port', e.target.value)}
+                    className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+                    placeholder="80, 443 or *"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button 
+                    variant="outline" 
+                    onClick={() => setIsAddModalOpen(false)} 
+                    className="border-[#2a2e3b] text-white hover:bg-[#2a2e3b]"
+                >
+                    Cancel
+                </Button>
+                <Button 
+                    onClick={handleCreateRule} 
+                    className="bg-primary-600 hover:bg-primary-500 text-white"
+                    disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin mr-2"></i> Saving...
+                      </>
+                  ) : "Create Rule"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+        </div>
       </CardHeader>
+        {/* MODAL EDIT */}
+  <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+    <DialogContent className="bg-[#1a1d25] border-[#2a2e3b] text-white">
+      <DialogHeader>
+        <DialogTitle>Edit Firewall Rule</DialogTitle>
+      </DialogHeader>
+      
+      {editingRule && (
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Name</Label>
+            <Input 
+              value={editingRule.name} 
+              onChange={(e) => setEditingRule({...editingRule, name: e.target.value})}
+              className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+            />
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Action</Label>
+            <div className="col-span-3 flex gap-4">
+              <select 
+                className="flex h-9 w-full rounded-md border border-[#2a2e3b] bg-[#11131a] px-3 py-1 text-sm text-white"
+                value={editingRule.action}
+                onChange={(e) => setEditingRule({...editingRule, action: e.target.value})}
+              >
+                <option value="allow">Allow</option>
+                <option value="deny">Deny</option>
+              </select>
+              
+              <select 
+                className="flex h-9 w-full rounded-md border border-[#2a2e3b] bg-[#11131a] px-3 py-1 text-sm text-white"
+                value={editingRule.protocol}
+                onChange={(e) => setEditingRule({...editingRule, protocol: e.target.value})}
+              >
+                <option value="TCP">TCP</option>
+                <option value="UDP">UDP</option>
+                <option value="ICMP">ICMP</option>
+                <option value="any">Any</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Source IP</Label>
+            <Input 
+              value={editingRule.source_ip} 
+              onChange={(e) => setEditingRule({...editingRule, source_ip: e.target.value})}
+              className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+            />
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Dest IP</Label>
+            <Input 
+              value={editingRule.dest_ip} 
+              onChange={(e) => setEditingRule({...editingRule, dest_ip: e.target.value})}
+              className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+            />
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label className="text-right text-gray-400">Dest Port</Label>
+            <Input 
+              value={editingRule.dest_port} 
+              onChange={(e) => setEditingRule({...editingRule, dest_port: e.target.value})}
+              className="col-span-3 bg-[#11131a] border-[#2a2e3b] text-white" 
+            />
+          </div>
+        </div>
+      )}
+
+      <DialogFooter>
+        <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="border-[#2a2e3b] text-white">
+          Cancel
+        </Button>
+        <Button 
+            onClick={handleUpdateRule} 
+            className="bg-primary-600 hover:bg-primary-500 text-white"
+            disabled={isUpdating}
+        >
+          {isUpdating ? "Updating..." : "Save Changes"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
       <CardContent>
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
               <tr className="text-left text-xs text-gray-400 border-b border-[#1a1d25]">
                 <th className="pb-2 font-medium">Name</th>
-                <th className="pb-2 font-medium">Type</th>
-                <th className="pb-2 font-medium">Status</th>
+                <th className="pb-2 font-medium">Proto</th>
+                <th className="pb-2 font-medium">Source - Dest</th>
+                <th className="pb-2 font-medium">Action</th>
                 <th className="pb-2 font-medium">Actions</th>
               </tr>
             </thead>
@@ -104,43 +376,45 @@ const FirewallRules: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3">
-                      <span className="text-xs bg-[#1a1d25] px-2 py-1 rounded-md">
-                        {rule.type}
+                      <span className="text-xs bg-[#1a1d25] px-2 py-1 rounded-md text-gray-300">
+                        {rule.protocol}
                       </span>
                     </td>
                     <td className="py-3">
+                       <div className="text-xs text-gray-400">
+                           {rule.source} <i className="ri-arrow-right-line mx-1"></i> {rule.destination}:{rule.port}
+                       </div>
+                    </td>
+                    <td className="py-3">
                       <span className={`text-xs ${
-                        rule.status === 'Active' 
+                        rule.action?.toLowerCase() === 'allow' 
                           ? 'bg-green-500/20 text-green-400' 
-                          : 'bg-gray-500/20 text-gray-400'
-                        } px-2 py-1 rounded-full`}>
-                        {rule.status}
+                          : 'bg-red-500/20 text-red-400'
+                        } px-2 py-1 rounded-full uppercase`}>
+                        {rule.action}
                       </span>
                     </td>
                     <td className="py-3">
                       <div className="flex space-x-2">
                         <button 
-                          className="text-gray-400 hover:text-white"
-                          onClick={() => handleEditRule(rule.id)}
-                        >
-                          <i className="ri-edit-line"></i>
-                        </button>
-                        <button 
-                          className="text-gray-400 hover:text-white"
+                        className="text-gray-400 hover:text-white" 
+                        onClick={() => handleEditRule(rule)} // On envoie l'objet entier au lieu de juste l'ID
+                      >
+                        <i className="ri-edit-line"></i>
+                      </button>
+                          <button 
+                          className={`${isDeleting === rule.id ? 'text-red-700' : 'text-gray-400 hover:text-red-500'}`}
                           onClick={() => handleDeleteRule(rule.id)}
+                          disabled={isDeleting === rule.id}
                         >
-                          <i className="ri-delete-bin-line"></i>
+                          {isDeleting === rule.id ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-delete-bin-line"></i>}
                         </button>
                       </div>
                     </td>
                   </tr>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={4} className="py-6 text-center text-gray-400">
-                    No firewall rules configured
-                  </td>
-                </tr>
+                <tr><td colSpan={5} className="py-6 text-center text-gray-400">No firewall rules configured</td></tr>
               )}
             </tbody>
           </table>
@@ -149,5 +423,25 @@ const FirewallRules: React.FC = () => {
     </Card>
   );
 };
+
+// Petits composants utilitaires pour alléger le code principal
+const LoadingView = () => (
+    <Card className="bg-[#11131a] border-[#1a1d25]">
+      <CardContent className="pt-6"><div className="animate-pulse space-y-3"><div className="h-8 bg-gray-700 rounded w-full"></div></div></CardContent>
+    </Card>
+);
+
+const ErrorView = ({ onRefresh, onAdd }: any) => (
+    <Card className="bg-[#11131a] border-[#1a1d25]">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-white">Firewall Rules</CardTitle>
+          <div className="flex gap-2">
+             <Button onClick={onRefresh} size="sm" variant="outline"><i className="ri-refresh-line"></i></Button>
+             <Button onClick={onAdd} size="sm" className="bg-primary-600">Add Rule</Button>
+          </div>
+        </CardHeader>
+        <CardContent><div className="text-center py-8 text-red-400">Error loading firewall rules</div></CardContent>
+    </Card>
+);
 
 export default FirewallRules;
