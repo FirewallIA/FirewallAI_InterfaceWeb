@@ -13,7 +13,6 @@ const AIAssistant: React.FC = () => {
 
   const messages: ChatMessage[] = data?.messages || [];
 
-  // Message d'accueil par défaut si l'historique est vide
   if (messages.length === 0) {
     messages.push({
       id: 'welcome',
@@ -25,7 +24,15 @@ const AIAssistant: React.FC = () => {
 
   const isWaitingForAI = messages.length > 0 && messages[messages.length - 1].sender === 'user';
 
-  // Système de Polling tant que l'IA réfléchit
+  // Fonction pour parser les messages de type [MCP Progress]
+  const formatAIMessage = (content: string) => {
+    const lines = content.split('\n');
+    const logs = lines.filter(line => line.includes('[MCP Progress]'));
+    const finalResponse = lines.filter(line => !line.includes('[MCP Progress]')).join('\n');
+
+    return { logs, finalResponse };
+  };
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isWaitingForAI) {
@@ -36,6 +43,8 @@ const AIAssistant: React.FC = () => {
     return () => clearInterval(interval);
   }, [isWaitingForAI]);
 
+  // ... (handleSendMessage, handleKeyDown restent identiques)
+
   const handleSendMessage = async () => {
     if (!messageText.trim()) return;
     setSendingMessage(true);
@@ -43,18 +52,12 @@ const AIAssistant: React.FC = () => {
       await apiRequest('POST', '/api/ai/chat/message', { content: messageText });
       queryClient.invalidateQueries({ queryKey: ['/api/ai/chat/history'] });
       setMessageText('');
-    } catch (err) {
-      console.error('Failed to send:', err);
-    } finally {
-      setSendingMessage(false);
-    }
+    } catch (err) { console.error(err); }
+    finally { setSendingMessage(false); }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
   };
 
   return (
@@ -69,19 +72,30 @@ const AIAssistant: React.FC = () => {
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col min-h-0 p-4">
-        {/* Zone de messages : overflow-y-auto permet de scroller manuellement sans effet automatique */}
         <div className="flex-1 overflow-y-auto pr-2 mb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           <div className="space-y-4">
-            {messages.map((msg) => (
-              <div key={msg.id} className={`flex items-start ${msg.sender === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-8 h-8 shrink-0 ${msg.sender === 'ai' ? 'bg-primary-600' : 'bg-[#1a1d25]'} rounded-full flex items-center justify-center ${msg.sender === 'ai' ? 'mr-3' : 'ml-3'} mt-1`}>
-                  <i className={`${msg.sender === 'ai' ? 'ri-robot-line' : 'ri-user-line'} text-white text-sm`}></i>
+            {messages.map((msg) => {
+              const { logs, finalResponse } = formatAIMessage(msg.content);
+              return (
+                <div key={msg.id} className={`flex items-start ${msg.sender === 'user' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`w-8 h-8 shrink-0 ${msg.sender === 'ai' ? 'bg-primary-600' : 'bg-[#1a1d25]'} rounded-full flex items-center justify-center ${msg.sender === 'ai' ? 'mr-3' : 'ml-3'} mt-1`}>
+                    <i className={`${msg.sender === 'ai' ? 'ri-robot-line' : 'ri-user-line'} text-white text-sm`}></i>
+                  </div>
+                  <div className={`${msg.sender === 'ai' ? 'bg-[#11131a] border border-gray-800/50' : 'bg-primary-900/50 border border-primary-800/50'} rounded-lg p-3 max-w-[85%]`}>
+                    {/* Affichage des logs MCP */}
+                    {logs.length > 0 && (
+                      <div className="mb-2 border-b border-gray-800 pb-2">
+                        {logs.map((log, i) => (
+                          <p key={i} className="text-[10px] font-mono text-gray-500">{log}</p>
+                        ))}
+                      </div>
+                    )}
+                    {/* Réponse finale */}
+                    <p className="text-sm text-gray-300 whitespace-pre-wrap">{finalResponse || (logs.length > 0 ? "..." : msg.content)}</p>
+                  </div>
                 </div>
-                <div className={`${msg.sender === 'ai' ? 'bg-[#11131a] border border-gray-800/50' : 'bg-primary-900/50 border border-primary-800/50'} rounded-lg p-3 max-w-[85%] whitespace-pre-wrap break-words`}>
-                  <p className="text-sm text-gray-300">{msg.content}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {isWaitingForAI && (
               <div className="flex items-start">
@@ -90,7 +104,7 @@ const AIAssistant: React.FC = () => {
                 </div>
                 <div className="bg-[#11131a] border border-gray-800/50 rounded-lg p-3">
                   <p className="text-sm text-gray-400 flex items-center gap-2">
-                    <i className="ri-loader-4-line animate-spin"></i> ChatSec is thinking...
+                    <i className="ri-loader-4-line animate-spin"></i> Analyzing firewall rules...
                   </p>
                 </div>
               </div>
@@ -98,7 +112,6 @@ const AIAssistant: React.FC = () => {
           </div>
         </div>
 
-        {/* Input area fixe en bas */}
         <div className="relative shrink-0 flex items-center bg-[#1a1d25] rounded-lg border border-[#222631]">
           <Input
             placeholder="Ask ChatSec a question..."
