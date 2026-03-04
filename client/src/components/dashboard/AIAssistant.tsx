@@ -10,19 +10,20 @@ const AIAssistant: React.FC = () => {
   const { data, isLoading, error } = useChatHistory();
   const [messageText, setMessageText] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessagesCount = useRef(0); // Pour éviter le saut au chargement initial
 
   const messages: ChatMessage[] = data?.messages || [];
   const isWaitingForAI = messages.length > 0 && messages[messages.length - 1].sender === 'user';
 
-  // Auto-scroll vers le bas lors de l'ajout d'un message
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Logique de scroll intelligente : seulement quand le nombre de messages change
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isWaitingForAI]);
+    if (messages.length > prevMessagesCount.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMessagesCount.current = messages.length;
+  }, [messages]);
 
   // Système de Polling tant que l'IA réfléchit
   useEffect(() => {
@@ -68,7 +69,7 @@ const AIAssistant: React.FC = () => {
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col min-h-0 p-4">
-        {/* Zone de messages avec scrollbar */}
+        {/* Zone de messages avec hauteur flexible et scrollbar */}
         <div className="flex-1 overflow-y-auto pr-2 mb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           <div className="space-y-4">
             {messages.map((msg) => (
