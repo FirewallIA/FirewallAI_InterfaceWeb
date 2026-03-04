@@ -22,9 +22,7 @@ const ensureAuthenticated = (req: Request, res: Response, next: NextFunction) =>
   res.status(401).json({ message: "Unauthorized - Authentication required" });
 };
 
-// --- ÉTAT GLOBAL POUR LE CHAT IA (Remplace mockData.chatHistory) ---
-// Note: Dans une app multi-utilisateurs de production, ceci devrait être stocké en BDD 
-// ou dans une Map indexée par l'ID utilisateur.
+// --- ÉTAT GLOBAL POUR LE CHAT IA ---
 const chatHistory = {
   messages: [
     { 
@@ -43,50 +41,68 @@ function getOrCreateMcpStream() {
   if (mcpStream) return mcpStream;
 
   console.log("[MCP] Ouverture d'un nouveau flux gRPC avec l'IA...");
-  mcpStream = mcpClient.chatStream();
+  try {
+    mcpStream = mcpClient.chatStream();
 
-  // Écoute des messages venant du serveur MCP (L'IA)
-  mcpStream.on('data', (serverMessage: any) => {
-    
-    // 1. L'IA a terminé sa tâche et renvoie un résultat final
-    if (serverMessage.final_result) {
+    // Écoute des messages venant du serveur MCP (L'IA)
+    mcpStream.on('data', (serverMessage: any) => {
+      
+      // 1. L'IA a terminé sa tâche et renvoie un résultat final
+      if (serverMessage.final_result) {
+        // On vérifie si le statut est une erreur
+        const isError = serverMessage.final_result.status === 'error';
+        const prefix = isError ? "❌ Erreur : " : "";
+
+        chatHistory.messages.push({
+          id: Date.now().toString(),
+          sender: 'ai',
+          content: prefix + (serverMessage.final_result.answer || serverMessage.final_result.message || "Action terminée."),
+          timestamp: new Date().toISOString()
+        });
+        console.log(`[MCP] Réponse finale reçue (Status: ${serverMessage.final_result.status}).`);
+      } 
+      
+      // 2. L'IA demande une confirmation à l'utilisateur
+      else if (serverMessage.confirmation_request) {
+        chatHistory.messages.push({
+          id: Date.now().toString(),
+          sender: 'ai',
+          content: `⚠️ Action requise : ${serverMessage.confirmation_request.action}\nRaison : ${serverMessage.confirmation_request.reason}\n\n👉 Répondez par "yes" pour confirmer, ou "no" pour annuler.`,
+          timestamp: new Date().toISOString()
+        });
+        console.log("[MCP] Demande de confirmation reçue.");
+      }
+
+      // 3. Les mises à jour de progression (progress)
+      else if (serverMessage.progress) {
+        console.log(`[MCP Progress] ${serverMessage.progress.action} : ${serverMessage.progress.message}`);
+      }
+    });
+
+    // --- GESTION DES ERREURS STREAM ---
+    mcpStream.on('error', (err: any) => {
+      console.error("[MCP] Erreur CRITIQUE de stream :", err.message);
+      
+      // IMPORTANT : On ajoute un message dans l'historique pour débloquer le frontend
       chatHistory.messages.push({
         id: Date.now().toString(),
         sender: 'ai',
-        content: serverMessage.final_result.answer || serverMessage.final_result.message || "Action terminée.",
+        content: "❌ Une erreur de connexion est survenue avec le serveur d'IA. Veuillez réessayer.",
         timestamp: new Date().toISOString()
       });
-      console.log("[MCP] Réponse finale reçue.");
-    } 
-    
-    // 2. L'IA demande une confirmation à l'utilisateur
-    else if (serverMessage.confirmation_request) {
-      chatHistory.messages.push({
-        id: Date.now().toString(),
-        sender: 'ai',
-        content: `⚠️ Action requise : ${serverMessage.confirmation_request.action}\nRaison : ${serverMessage.confirmation_request.reason}\n\n👉 Répondez par "yes" pour confirmer, ou "no" pour annuler.`,
-        timestamp: new Date().toISOString()
-      });
-      console.log("[MCP] Demande de confirmation reçue.");
-    }
 
-    // 3. Les mises à jour de progression (progress)
-    // On les logge côté serveur pour le débug. 
-    else if (serverMessage.progress) {
-      console.log(`[MCP Progress] ${serverMessage.progress.action} : ${serverMessage.progress.message}`);
-    }
-  });
+      mcpStream = null; 
+    });
 
-  mcpStream.on('error', (err: any) => {
-    // Ne crashe pas le serveur si l'IA se déconnecte, on nettoie juste le stream
-    console.error("[MCP] Erreur de stream :", err.message);
-    mcpStream = null; 
-  });
+    mcpStream.on('end', () => {
+      console.log("[MCP] Stream terminé par le serveur.");
+      mcpStream = null;
+    });
 
-  mcpStream.on('end', () => {
-    console.log("[MCP] Stream terminé par le serveur.");
+  } catch (error) {
+    console.error("[MCP] Impossible de créer le stream:", error);
     mcpStream = null;
-  });
+  }
 
   return mcpStream;
 }
@@ -312,27 +328,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     // 2. Récupérer ou ouvrir le flux gRPC avec le serveur Rust (MCP)
-    const stream = getOrCreateMcpStream();
-
-    // 3. Vérifier si l'IA attendait une confirmation ("yes" ou "no")
-    // On regarde le dernier message de l'IA pour voir s'il contient le flag d'Action requise
-    const lastAiMessage = [...chatHistory.messages].reverse().find(m => m.sender === 'ai');
-    const isExpectingConfirmation = lastAiMessage?.content?.includes('Action requise');
-
-    if (isExpectingConfirmation) {
-      // Si on attend une confirmation, on interprète le texte de l'utilisateur
-      const lowerContent = content.toLowerCase().trim();
-      const isYes = ['yes', 'y', 'oui', 'o', 'true', 'confirm'].includes(lowerContent);
+    let stream;
+    try {
+      stream = getOrCreateMcpStream();
       
-      // Envoi du format "confirmation"
-      stream.write({ confirmation: isYes });
-    } else {
-      // Sinon, on envoie la requête en texte libre
-      stream.write({ prompt_text: content });
-    }
+      if (!stream) {
+         throw new Error("Impossible d'établir la connexion avec le serveur MCP");
+      }
 
-    // Le frontend continuera son cycle et viendra refetcher l'historique
-    res.status(201).json({ message: 'Message sent to MCP' });
+      // 3. Vérifier si l'IA attendait une confirmation ("yes" ou "no")
+      const lastAiMessage = [...chatHistory.messages].reverse().find(m => m.sender === 'ai');
+      // On s'assure que le dernier message n'était pas une erreur avant de vérifier la confirmation
+      const isExpectingConfirmation = lastAiMessage?.content?.includes('Action requise') && !lastAiMessage.content.includes('❌');
+
+      if (isExpectingConfirmation) {
+        // Si on attend une confirmation, on interprète le texte de l'utilisateur
+        const lowerContent = content.toLowerCase().trim();
+        const isYes = ['yes', 'y', 'oui', 'o', 'true', 'confirm'].includes(lowerContent);
+        stream.write({ confirmation: isYes });
+      } else {
+        // Sinon, on envoie la requête en texte libre
+        stream.write({ prompt_text: content });
+      }
+
+      res.status(201).json({ message: 'Message sent to MCP' });
+
+    } catch (error: any) {
+      console.error("Erreur lors de l'envoi au MCP:", error);
+      
+      // En cas d'erreur immédiate, on l'ajoute direct à l'historique
+      // Cela permet au frontend de recevoir l'info au prochain polling
+      chatHistory.messages.push({
+        id: Date.now().toString(),
+        sender: 'ai',
+        content: "❌ Erreur : Impossible de contacter le serveur d'IA. Vérifiez que le service est démarré.",
+        timestamp: new Date().toISOString()
+      });
+      
+      // On force le reset du stream
+      mcpStream = null;
+
+      // On répond OK pour que le frontend refasse un appel à /history et voie l'erreur
+      res.status(201).json({ message: 'Error handled via chat' });
+    }
   });
 
   // User Management
@@ -399,7 +437,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const grpcStream = firewallClient.getLogStream();
 
     grpcStream.on('data', (logEntry: any) => {
-        // Vérification de sécurité pour ne pas crasher si le WS est fermé
         if (ws.readyState === ws.OPEN) {
              ws.send(JSON.stringify({
                 type: 'log_entry',
@@ -413,7 +450,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     grpcStream.on('error', (err: any) => {
-        // Les erreurs "Cancelled" sont normales quand on ferme la page
         if (!err.message.includes('Cancelled')) {
             console.error("[gRPC] Erreur de stream client (Logs):", err.message);
         }
@@ -426,10 +462,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     // 3. IMPORTANT : Nettoyage
-    // Quand le navigateur se ferme ou change de page
     ws.on('close', () => {
       console.log('[WS] Client déconnecté - Arrêt du flux gRPC associé');
-      // On coupe le tuyau gRPC pour ne pas que le serveur Rust continue d'envoyer pour rien
       if (grpcStream) {
           grpcStream.cancel(); 
       }
