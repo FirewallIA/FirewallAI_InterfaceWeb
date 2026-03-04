@@ -1,19 +1,18 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useThreats } from '@/lib/data';
-import { Threat } from '@/lib/types';
 
-const getSeverityColor = (severity: string) => {
+// Remplacement par des classes complètes pour éviter que Tailwind ne les supprime (purge)
+const getSeverityStyles = (severity: string) => {
   switch (severity) {
     case 'High':
-      return 'red';
+      return { bg: 'bg-red-500/20', text: 'text-red-500', badge: 'text-red-400' };
     case 'Medium':
-      return severity === 'Medium' ? 'orange' : 'yellow';
+      return { bg: 'bg-orange-500/20', text: 'text-orange-500', badge: 'text-orange-400' };
     case 'Low':
-      return 'blue';
+      return { bg: 'bg-blue-500/20', text: 'text-blue-500', badge: 'text-blue-400' };
     default:
-      return 'gray';
+      return { bg: 'bg-gray-500/20', text: 'text-gray-500', badge: 'text-gray-400' };
   }
 };
 
@@ -26,92 +25,69 @@ const getIconForThreatType = (type: string) => {
 };
 
 const ThreatDetection: React.FC = () => {
-  const { data, isLoading, error } = useThreats();
-
-  const renderThreatItem = (threat: Threat) => {
-    const severityColor = getSeverityColor(threat.severity);
-    const icon = getIconForThreatType(threat.type);
-    
-    return (
-      <div key={threat.id} className="bg-[#1a1d25] rounded-lg p-3 flex items-start">
-        <div className={`mr-3 mt-1 bg-${severityColor}-500/20 rounded-full p-1.5`}>
-          <i className={`${icon} text-${severityColor}-500`}></i>
-        </div>
-        <div>
-          <div className="flex items-center">
-            <h4 className="text-sm font-medium text-white">{threat.type}</h4>
-            <span className={`ml-2 bg-${severityColor}-500/20 text-${severityColor}-400 text-xs px-1.5 py-0.5 rounded-full`}>
-              {threat.severity}
-            </span>
-          </div>
-          <p className="text-xs text-gray-400 mt-1">From: {threat.source}</p>
-          <p className="text-xs text-gray-400">{threat.timestamp}</p>
-        </div>
-      </div>
-    );
-  };
-
-  if (isLoading) {
-    return (
-      <Card className="bg-[#11131a] border-[#1a1d25]">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-white">Latest Threats</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-[#1a1d25] rounded-lg p-3 animate-pulse">
-                <div className="flex items-start">
-                  <div className="mr-3 mt-1 bg-gray-700 rounded-full p-1.5 w-8 h-8"></div>
-                  <div className="w-full">
-                    <div className="h-4 bg-gray-700 rounded w-2/3 mb-2"></div>
-                    <div className="h-3 bg-gray-700 rounded w-1/2 mb-1"></div>
-                    <div className="h-3 bg-gray-700 rounded w-1/3"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="bg-[#11131a] border-[#1a1d25]">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-white">Latest Threats</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-full flex items-center justify-center text-red-400">
-            Error loading threat data
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const threats: Threat[] = data?.threats || [];
+  // Données de démonstration (factices)
+  const demoThreats = [
+    { id: '1', type: 'Ransomware Activity Pattern', severity: 'High', source: '192.168.1.45', timestamp: '5 mins ago' },
+    { id: '2', type: 'Brute Force Login Attempt', severity: 'Medium', source: '45.22.11.90', timestamp: '12 mins ago' },
+    { id: '3', type: 'Suspicious Port Scan', severity: 'Low', source: 'External IP', timestamp: '1 hour ago' },
+    { id: '4', type: 'Anomalous Admin Login', severity: 'Medium', source: '10.0.0.5', timestamp: '3 hours ago' },
+  ];
 
   return (
     <Card className="bg-[#11131a] border-[#1a1d25]">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-white">Latest Threats</CardTitle>
+        <div className="flex items-center space-x-3">
+          <CardTitle className="text-white">Latest Threats</CardTitle>
+          
+          {/* Tag DEMO VERSION */}
+          <span className="flex items-center text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full font-medium shadow-[0_0_10px_rgba(245,158,11,0.1)]">
+            <i className="ri-test-tube-line mr-1.5"></i>
+            Demo Version
+          </span>
+        </div>
+        
         <Button variant="link" className="text-primary-400 hover:text-primary-300 text-xs p-0">
           View All
         </Button>
       </CardHeader>
+      
       <CardContent>
+        {/* L'interface est maintenant pleinement visible (pas d'opacité, pas de flou) */}
         <div className="space-y-4">
-          {threats.length > 0 ? (
-            threats.map(renderThreatItem)
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              <i className="ri-shield-check-line text-3xl mb-2 text-green-500"></i>
-              <p>No recent threats detected</p>
-            </div>
-          )}
+          {demoThreats.map((threat) => {
+            const styles = getSeverityStyles(threat.severity);
+            const icon = getIconForThreatType(threat.type);
+            
+            return (
+              <div key={threat.id} className="bg-[#1a1d25] rounded-lg p-3 flex items-start transition-all hover:bg-[#222631] cursor-default border border-transparent hover:border-[#2a2e3d]">
+                <div className={`mr-3 mt-1 ${styles.bg} rounded-full p-1.5`}>
+                  <i className={`${icon} ${styles.text}`}></i>
+                </div>
+                <div className="w-full">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <h4 className="text-sm font-medium text-white">{threat.type}</h4>
+                      <span className={`ml-2 ${styles.bg} ${styles.badge} text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider`}>
+                        {threat.severity}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <p className="text-xs text-gray-400">From: {threat.source}</p>
+                    <p className="text-xs text-gray-500">{threat.timestamp}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Petit texte d'information discret en bas */}
+        <div className="mt-4 pt-3 border-t border-[#1a1d25] flex justify-center">
+          <p className="text-[10px] text-gray-500 flex items-center">
+            <i className="ri-information-line mr-1"></i>
+            Showing simulated threat data for demonstration purposes
+          </p>
         </div>
       </CardContent>
     </Card>
