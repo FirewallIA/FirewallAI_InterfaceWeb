@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,9 +10,6 @@ const AIAssistant: React.FC = () => {
   const { data, isLoading, error } = useChatHistory();
   const [messageText, setMessageText] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
-  
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const isFirstRender = useRef(true); // Verrou pour empêcher le scroll au démarrage
 
   const messages: ChatMessage[] = data?.messages || [];
 
@@ -27,15 +24,6 @@ const AIAssistant: React.FC = () => {
   }
 
   const isWaitingForAI = messages.length > 0 && messages[messages.length - 1].sender === 'user';
-
-  // Logique de scroll : ignore le tout premier rendu
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isWaitingForAI]);
 
   // Système de Polling tant que l'IA réfléchit
   useEffect(() => {
@@ -81,7 +69,7 @@ const AIAssistant: React.FC = () => {
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col min-h-0 p-4">
-        {/* Zone de messages avec hauteur flexible et scrollbar stylisée */}
+        {/* Zone de messages : overflow-y-auto permet de scroller manuellement sans effet automatique */}
         <div className="flex-1 overflow-y-auto pr-2 mb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           <div className="space-y-4">
             {messages.map((msg) => (
@@ -107,8 +95,6 @@ const AIAssistant: React.FC = () => {
                 </div>
               </div>
             )}
-            {/* L'ancre de scroll */}
-            <div ref={messagesEndRef} />
           </div>
         </div>
 
