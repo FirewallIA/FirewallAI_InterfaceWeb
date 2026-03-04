@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package firewall;
+
+import "firewall.proto";
+import "google/protobuf/empty.proto";
+
+// ============= MCP SERVICE MESSAGES =============
+
+// ClientMessage: sent from client to server
+message ClientMessage {
+    oneof content {
+        string prompt_text = 1;      // User's natural language prompt
+        bool confirmation = 2;        // Confirmation response (true/false)
+    }
+}
+
+// ProgressUpdate: sent during processing
+message ProgressUpdate {
+    int32 iteration = 1;
+    string message = 2;
+    string action = 3;             // thinking, list, create, delete, get, done, etc.
+    repeated Suggestion suggestions = 4;
+}
+
+// Suggestion for follow-up actions
+message Suggestion {
+    string message = 1;
+    string action_json = 2;        // JSON string of next action
+}
+
+// ConfirmationRequest: asks for user confirmation
+message ConfirmationRequest {
+    string action = 1;
+    int32 rule_id = 2;
+    repeated int32 ids = 3;        // For multi_delete
+    string reason = 4;
+    string level = 5;              // high, medium, low
+}
+
+// FinalResult: final response after processing
+message FinalResult {
+    string status = 1;             // ok, error, blocked, cancelled, timeout
+    string answer = 2;
+    repeated Suggestion suggestions = 3;
+    int32 iterations = 4;
+    string message = 5;
+    string detail = 6;
+}
+
+// ServerMessage: sent from server to client
+message ServerMessage {
+    oneof content {
+        ProgressUpdate progress = 1;
+        ConfirmationRequest confirmation_request = 2;
+        FinalResult final_result = 3;
+    }
+}
+
+// ============= LEGACY MESSAGES (for compatibility) =============
+
+// Legacy message for compatibility
+message FirewallRule {
+    int32 id = 1;
+    string source_ip = 2;
+    string dest_ip = 3;
+    string source_port = 4;
+    string dest_port = 5;
+}
+
+message RuleCreate {
+    string source_ip = 1;
+    string dest_ip = 2;
+    string source_port = 3;
+    string dest_port = 4;
+}
+
+message RuleId {
+    int32 id = 1;
+}
+
+message RuleList {
+    repeated FirewallRule rules = 1;
+    int32 count = 2;
+}
+
+message Stats {
+    int32 total_rules = 1;
+    int32 next_id = 2;
+    map<string, int32> rules_count_by_port = 3;
+}
+
+message Empty {}
+
+// ============= MCP SERVICE =============
+
+// MCPService: MCP communication with bidirectional streaming
+service MCPService {
+    // Chat: bidirectional streaming for natural language interaction
+    rpc Chat (stream ClientMessage) returns (stream ServerMessage);
+}

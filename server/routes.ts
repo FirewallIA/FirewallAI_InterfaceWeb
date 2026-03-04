@@ -6,10 +6,13 @@ import { setupAuth } from "./auth";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
 import { FirewallClient } from "./firewall_client";
+import { MCPClient } from "./firewall_mcp_client";
 
 const scryptAsync = promisify(scrypt);
-// Initialise le client gRPC
+
+// Initialise les clients gRPC
 const firewallClient = new FirewallClient();
+const mcpClient = new MCPClient();
 
 // Middleware pour vérifier si l'utilisateur est authentifié
 const ensureAuthenticated = (req: Request, res: Response, next: NextFunction) => {
@@ -19,7 +22,76 @@ const ensureAuthenticated = (req: Request, res: Response, next: NextFunction) =>
   res.status(401).json({ message: "Unauthorized - Authentication required" });
 };
 
-// Mock data for the FirewallAI frontend
+// --- ÉTAT GLOBAL POUR LE CHAT IA (Remplace mockData.chatHistory) ---
+// Note: Dans une app multi-utilisateurs de production, ceci devrait être stocké en BDD 
+// ou dans une Map indexée par l'ID utilisateur.
+const chatHistory = {
+  messages: [
+    { 
+      id: 'welcome', 
+      sender: 'ai', 
+      content: "Hello! I'm your FirewallAI assistant. How can I help you today?", 
+      timestamp: new Date().toISOString() 
+    }
+  ]
+};
+
+// Variable pour conserver la connexion gRPC MCP ouverte (bidirectionnelle)
+let mcpStream: any = null;
+
+function getOrCreateMcpStream() {
+  if (mcpStream) return mcpStream;
+
+  console.log("[MCP] Ouverture d'un nouveau flux gRPC avec l'IA...");
+  mcpStream = mcpClient.chatStream();
+
+  // Écoute des messages venant du serveur MCP (L'IA)
+  mcpStream.on('data', (serverMessage: any) => {
+    
+    // 1. L'IA a terminé sa tâche et renvoie un résultat final
+    if (serverMessage.final_result) {
+      chatHistory.messages.push({
+        id: Date.now().toString(),
+        sender: 'ai',
+        content: serverMessage.final_result.answer || serverMessage.final_result.message || "Action terminée.",
+        timestamp: new Date().toISOString()
+      });
+      console.log("[MCP] Réponse finale reçue.");
+    } 
+    
+    // 2. L'IA demande une confirmation à l'utilisateur
+    else if (serverMessage.confirmation_request) {
+      chatHistory.messages.push({
+        id: Date.now().toString(),
+        sender: 'ai',
+        content: `⚠️ Action requise : ${serverMessage.confirmation_request.action}\nRaison : ${serverMessage.confirmation_request.reason}\n\n👉 Répondez par "yes" pour confirmer, ou "no" pour annuler.`,
+        timestamp: new Date().toISOString()
+      });
+      console.log("[MCP] Demande de confirmation reçue.");
+    }
+
+    // 3. Les mises à jour de progression (progress)
+    // On les logge côté serveur pour le débug. 
+    else if (serverMessage.progress) {
+      console.log(`[MCP Progress] ${serverMessage.progress.action} : ${serverMessage.progress.message}`);
+    }
+  });
+
+  mcpStream.on('error', (err: any) => {
+    // Ne crashe pas le serveur si l'IA se déconnecte, on nettoie juste le stream
+    console.error("[MCP] Erreur de stream :", err.message);
+    mcpStream = null; 
+  });
+
+  mcpStream.on('end', () => {
+    console.log("[MCP] Stream terminé par le serveur.");
+    mcpStream = null;
+  });
+
+  return mcpStream;
+}
+
+// Mock data for the rest of the Dashboard
 const mockData = {
   systemStatus: {
     status: {
@@ -61,11 +133,6 @@ const mockData = {
       ],
       summary: { active: 32, alert: 4, warning: 6, inactive: 2 }
     }
-  },
-  chatHistory: {
-    messages: [
-      { id: '1', sender: 'ai', content: "Hello! I'm your FirewallAI assistant. How can I help you today?", timestamp: new Date(Date.now() - 300000).toISOString() }
-    ]
   },
   edrStatus: {
     status: {
@@ -216,7 +283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Logs & EDR & AI (Mock/Basic)
+  // Logs & EDR (Mock/Basic)
   app.get('/api/logs/analysis', ensureAuthenticated, (req, res) => res.json(mockData.logAnalysis));
   app.get('/api/logs/summary', ensureAuthenticated, (req, res) => res.json(mockData.logSummary));
   app.get('/api/logs/export', ensureAuthenticated, (req, res) => res.json({ message: "Export coming soon" }));
@@ -226,22 +293,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/edr/settings', ensureAuthenticated, (req, res) => res.json({ message: "Not implemented" }));
   app.get('/api/edr/logs', ensureAuthenticated, (req, res) => res.json({ message: "Not implemented" }));
 
-  app.get('/api/ai/chat/history', ensureAuthenticated, (req, res) => res.json(mockData.chatHistory));
+  // --- ROUTES AI CHAT (MCP gRPC Integration) ---
+  app.get('/api/ai/chat/history', ensureAuthenticated, (req, res) => {
+    // Retourne l'historique mis à jour (incluant les retours du MCP gRPC stream)
+    res.json(chatHistory);
+  });
+
   app.post('/api/ai/chat/message', ensureAuthenticated, (req, res) => {
     const { content } = req.body;
     if (!content) return res.status(400).json({ message: 'Message content required' });
     
-    mockData.chatHistory.messages.push({
-      id: Date.now().toString(), sender: 'user', content, timestamp: new Date().toISOString()
+    // 1. Sauvegarder le message de l'utilisateur dans l'historique
+    chatHistory.messages.push({
+      id: Date.now().toString(), 
+      sender: 'user', 
+      content, 
+      timestamp: new Date().toISOString()
     });
-    setTimeout(() => {
-      mockData.chatHistory.messages.push({
-        id: (Date.now() + 1).toString(), sender: 'ai',
-        content: `I've analyzed your query: "${content}". Simulated response.`,
-        timestamp: new Date().toISOString()
-      });
-    }, 1000);
-    res.status(201).json({ message: 'Message sent' });
+
+    // 2. Récupérer ou ouvrir le flux gRPC avec le serveur Rust (MCP)
+    const stream = getOrCreateMcpStream();
+
+    // 3. Vérifier si l'IA attendait une confirmation ("yes" ou "no")
+    // On regarde le dernier message de l'IA pour voir s'il contient le flag d'Action requise
+    const lastAiMessage = [...chatHistory.messages].reverse().find(m => m.sender === 'ai');
+    const isExpectingConfirmation = lastAiMessage?.content?.includes('Action requise');
+
+    if (isExpectingConfirmation) {
+      // Si on attend une confirmation, on interprète le texte de l'utilisateur
+      const lowerContent = content.toLowerCase().trim();
+      const isYes = ['yes', 'y', 'oui', 'o', 'true', 'confirm'].includes(lowerContent);
+      
+      // Envoi du format "confirmation"
+      stream.write({ confirmation: isYes });
+    } else {
+      // Sinon, on envoie la requête en texte libre
+      stream.write({ prompt_text: content });
+    }
+
+    // Le frontend continuera son cycle et viendra refetcher l'historique
+    res.status(201).json({ message: 'Message sent to MCP' });
   });
 
   // User Management
@@ -304,7 +395,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('[WS] Client dashboard connecté');
     ws.send(JSON.stringify({ type: 'connection', status: 'connected' }));
     
-    // --- MODIFICATION ICI : Un stream gRPC par client ---
     // On demande au serveur Rust les logs (Historique + Live) pour CE client
     const grpcStream = firewallClient.getLogStream();
 
@@ -325,13 +415,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     grpcStream.on('error', (err: any) => {
         // Les erreurs "Cancelled" sont normales quand on ferme la page
         if (!err.message.includes('Cancelled')) {
-            console.error("[gRPC] Erreur de stream client:", err.message);
+            console.error("[gRPC] Erreur de stream client (Logs):", err.message);
         }
         ws.close();
     });
 
     grpcStream.on('end', () => {
-        console.log("[gRPC] Stream terminé par le serveur.");
+        console.log("[gRPC] Stream de logs terminé par le serveur.");
         ws.close();
     });
 
@@ -345,9 +435,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
   });
-
-  // SUPPRIMEZ TOUTE LA FONCTION startLogStream() GLOBALE QUI ÉTAIT ICI
-  // ET L'APPEL startLogStream();
 
   return httpServer;
 }
