@@ -12,18 +12,30 @@ const AIAssistant: React.FC = () => {
   const [sendingMessage, setSendingMessage] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const prevMessagesCount = useRef(0); // Pour éviter le saut au chargement initial
+  const isFirstRender = useRef(true); // Verrou pour empêcher le scroll au démarrage
 
   const messages: ChatMessage[] = data?.messages || [];
+
+  // Message d'accueil par défaut si l'historique est vide
+  if (messages.length === 0) {
+    messages.push({
+      id: 'welcome',
+      sender: 'ai',
+      content: "Hello! I'm your FirewallAI assistant. How can I help you today?",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   const isWaitingForAI = messages.length > 0 && messages[messages.length - 1].sender === 'user';
 
-  // Logique de scroll intelligente : seulement quand le nombre de messages change
+  // Logique de scroll : ignore le tout premier rendu
   useEffect(() => {
-    if (messages.length > prevMessagesCount.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
-    prevMessagesCount.current = messages.length;
-  }, [messages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isWaitingForAI]);
 
   // Système de Polling tant que l'IA réfléchit
   useEffect(() => {
@@ -69,7 +81,7 @@ const AIAssistant: React.FC = () => {
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col min-h-0 p-4">
-        {/* Zone de messages avec hauteur flexible et scrollbar */}
+        {/* Zone de messages avec hauteur flexible et scrollbar stylisée */}
         <div className="flex-1 overflow-y-auto pr-2 mb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           <div className="space-y-4">
             {messages.map((msg) => (
@@ -95,6 +107,7 @@ const AIAssistant: React.FC = () => {
                 </div>
               </div>
             )}
+            {/* L'ancre de scroll */}
             <div ref={messagesEndRef} />
           </div>
         </div>
