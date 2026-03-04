@@ -30,7 +30,7 @@ export class MCPClient {
   private client: any;
 
   constructor(
-    address: string = process.env.MCP_GRPC_ADDR || "[::1]:50051", // Remplace par l'IP/Port de ton serveur MCP
+    address: string = process.env.MCP_GRPC_ADDR || "[::1]:9001", // Remplace par l'IP/Port de ton serveur MCP
     creds: grpc.ChannelCredentials = grpc.credentials.createInsecure()
   ) {
     this.client = new mcpProto.MCPService(address, creds);
